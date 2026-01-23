@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Live Chat Intelligence",
-  "version": "0.1.0",
-  "description": "Transform chaotic YouTube Live chat into visual insights",
+  "version": "1.0.0",
+  "description": "Transform chaotic YouTube Live chat into visual insights - ticker detection, sentiment analysis, and AI summaries for trading streams",
   
   "permissions": [
     "activeTab",
@@ -14,10 +14,7 @@
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://youtube.com/*",
-    "ws://localhost:8765/*",
-    "ws://127.0.0.1:8765/*",
-    "http://localhost:8765/*",
-    "http://127.0.0.1:8765/*"
+    "wss://web-production-6fa01.up.railway.app/*"
   ],
   
   "background": {
