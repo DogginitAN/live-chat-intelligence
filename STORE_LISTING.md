@@ -1,16 +1,16 @@
 # Chrome Web Store Listing
 
 ## Extension Name
-Live Chat Intelligence
+FlowState
 
 ## Short Description (132 characters max)
-Transform chaotic YouTube Live chat into visual insights with ticker detection, sentiment analysis, and AI summaries.
+Transform chaotic YouTube Live chat into visual clarity with ticker detection, sentiment analysis, and AI summaries.
 
 ## Detailed Description
 
-**Cut through the noise of YouTube Live chat.**
+**Find your flow in the chaos of YouTube Live chat.**
 
-Live Chat Intelligence transforms overwhelming live stream chats into actionable visual insights. Built for traders watching stock/crypto streams, but useful for anyone wanting to make sense of fast-moving chat.
+FlowState transforms overwhelming live stream chats into visual clarity. Built for traders watching stock/crypto streams, but useful for anyone wanting to make sense of fast-moving chat.
 
 ### ✨ Key Features
 
@@ -35,7 +35,7 @@ Intelligent filtering removes promotion spam, scam links, and bot messages so yo
 ### 🖥️ How to Use
 
 1. Navigate to any YouTube Live stream
-2. Click the extension icon to open the side panel
+2. Click the FlowState icon to open the side panel
 3. Watch the visualization update in real-time
 4. Pop out to a separate window for multi-monitor setups
 
@@ -72,7 +72,8 @@ English
 - sentiment analysis
 - ticker detection
 - live stream
-- chat analysis
+- flowstate
+- focus
 
 ## Screenshots Needed (1280x800 or 640x400)
 
@@ -84,7 +85,7 @@ English
 
 ## Promotional Images
 
-- **Small Tile (440x280):** Extension logo with tagline
+- **Small Tile (440x280):** FlowState logo with tagline "Find clarity in the chaos"
 - **Large Tile (920x680):** Feature showcase
 - **Marquee (1400x560):** Hero image with main features
 

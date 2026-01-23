@@ -22,7 +22,7 @@ let currentVideoId = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
-console.log('[BG] Live Chat Intelligence service worker started');
+console.log('[BG] FlowState service worker started');
 
 // ============== SIDE PANEL MANAGEMENT ==============
 

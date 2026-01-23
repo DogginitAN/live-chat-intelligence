@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Live Chat Intelligence",
+  "name": "FlowState",
   "version": "1.0.0",
-  "description": "Transform chaotic YouTube Live chat into visual insights - ticker detection, sentiment analysis, and AI summaries for trading streams",
+  "description": "Transform chaotic YouTube Live chat into visual clarity - ticker detection, sentiment analysis, and AI summaries",
   
   "permissions": [
     "activeTab",
@@ -40,7 +40,7 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     },
-    "default_title": "Live Chat Intelligence"
+    "default_title": "FlowState"
   },
   
   "icons": {

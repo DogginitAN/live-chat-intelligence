@@ -66,6 +66,10 @@ async def llm_complete(prompt: str, temperature: float = 0, timeout: float = 10.
                     }
                 )
                 data = response.json()
+                # Check for rate limit or other errors
+                if "error" in data:
+                    print(f"[LLM] Groq error: {data['error'].get('message', data['error'])}")
+                    return None
                 return data["choices"][0]["message"]["content"].strip()
             else:
                 # Ollama (local)
@@ -100,6 +104,11 @@ connected_clients: Set = set()
 # Chat Pulse configuration
 PULSE_INTERVAL = 120  # Generate summary every 2 minutes
 PULSE_MESSAGE_WINDOW = 100
+
+# Rate limiting for Groq free tier (30 req/min)
+# Prioritize pulse over vibe classification
+VIBE_CHECK_INTERVAL = 30  # Check vibes every 30 seconds (was 3)
+VIBE_BATCH_SIZE = 3  # Only classify 3 messages at a time (was 10)
 
 # Per-video state
 video_state: Dict[str, dict] = {}
@@ -475,10 +484,11 @@ async def classify_vibe_batch(messages: list) -> list:
     if not messages:
         return messages
     
-    tasks = [classify_vibe_single(msg['text']) for msg in messages[:10]]
+    # Only classify a few messages to stay within rate limits
+    tasks = [classify_vibe_single(msg['text']) for msg in messages[:VIBE_BATCH_SIZE]]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
-    for i, (msg, vibe) in enumerate(zip(messages[:10], results)):
+    for i, (msg, vibe) in enumerate(zip(messages[:VIBE_BATCH_SIZE], results)):
         if isinstance(vibe, str) and vibe in ('funny', 'uplifting'):
             msg['vibe'] = vibe
     
@@ -616,8 +626,8 @@ async def scrape_youtube_chat(video_id: str):
             
             current_time = asyncio.get_event_loop().time()
             
-            # Vibe classification
-            if current_time - last_vibe_check >= 3 and vibe_batch:
+            # Vibe classification (throttled for rate limits)
+            if current_time - last_vibe_check >= VIBE_CHECK_INTERVAL and vibe_batch:
                 classified = await classify_vibe_batch(vibe_batch[-20:])
                 for msg in classified:
                     if msg.get('vibe'):
@@ -657,7 +667,7 @@ async def handle_client(websocket):
     try:
         await websocket.send(json.dumps({
             'type': 'connected',
-            'message': 'Connected to Live Chat Intelligence backend'
+            'message': 'Connected to FlowState backend'
         }))
         
         async for message in websocket:
@@ -727,7 +737,7 @@ async def handle_client(websocket):
 
 async def main(video_url: str = None):
     """Start the WebSocket server, optionally with a default video"""
-    print(f"Starting Live Chat Intelligence backend on port {WEBSOCKET_PORT}")
+    print(f"Starting FlowState backend on port {WEBSOCKET_PORT}")
     print(f"WebSocket: ws://0.0.0.0:{WEBSOCKET_PORT}")
     
     if video_url:

@@ -1,10 +1,10 @@
-# Privacy Policy for Live Chat Intelligence
+# Privacy Policy for FlowState
 
 **Last Updated:** January 23, 2026
 
 ## Overview
 
-Live Chat Intelligence is a Chrome extension that visualizes YouTube Live chat streams. We are committed to protecting your privacy and being transparent about our data practices.
+FlowState is a Chrome extension that visualizes YouTube Live chat streams. We are committed to protecting your privacy and being transparent about our data practices.
 
 ## Data Collection
 
@@ -68,4 +68,4 @@ https://github.com/DogginitAN/live-chat-intelligence
 
 ---
 
-By using Live Chat Intelligence, you agree to this privacy policy.
+By using FlowState, you agree to this privacy policy.
