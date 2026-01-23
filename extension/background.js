@@ -8,8 +8,10 @@
  * - Track active YouTube Live streams
  */
 
-// Backend WebSocket URL (will be configurable)
-const BACKEND_URL = 'ws://localhost:8765';
+// Backend WebSocket URL
+// Production: wss://web-production-6fa01.up.railway.app
+// Local dev:  ws://localhost:8765
+const BACKEND_URL = 'wss://web-production-6fa01.up.railway.app';
 
 // Track state per tab
 const tabStates = new Map();

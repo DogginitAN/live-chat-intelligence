@@ -9,7 +9,7 @@
 // ============== CONFIGURATION ==============
 
 const urlParams = new URLSearchParams(window.location.search);
-const BACKEND_URL = urlParams.get('backend') || 'ws://127.0.0.1:8765';
+const BACKEND_URL = urlParams.get('backend') || 'wss://web-production-6fa01.up.railway.app';
 const initialVideoId = urlParams.get('v') || urlParams.get('video') || '';
 
 // Detect if we're running in extension context
