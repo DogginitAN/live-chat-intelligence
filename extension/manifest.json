@@ -1,0 +1,62 @@
+{
+  "manifest_version": 3,
+  "name": "Live Chat Intelligence",
+  "version": "0.1.0",
+  "description": "Transform chaotic YouTube Live chat into visual insights",
+  
+  "permissions": [
+    "activeTab",
+    "storage",
+    "sidePanel",
+    "tabs"
+  ],
+  
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://youtube.com/*",
+    "ws://localhost:8765/*",
+    "ws://127.0.0.1:8765/*",
+    "http://localhost:8765/*",
+    "http://127.0.0.1:8765/*"
+  ],
+  
+  "background": {
+    "service_worker": "background.js"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*", "https://youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  
+  "side_panel": {
+    "default_path": "sidepanel/panel.html"
+  },
+  
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "Live Chat Intelligence"
+  },
+  
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  
+  "web_accessible_resources": [
+    {
+      "resources": ["sidepanel/standalone.html", "sidepanel/standalone.js", "sidepanel/panel.css"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

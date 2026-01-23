@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Chat Intelligence</title>
+    <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header id="header">
+            <div class="header-left">
+                <h1>Live Chat Intelligence</h1>
+                <div id="connection-status" class="status disconnected">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Disconnected</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <button id="popout-btn" class="popout-btn" title="Open in new window">
+                    ⧉
+                </button>
+                <div id="velocity-display">
+                    <span class="velocity-label">Chat</span>
+                    <span id="velocity-value" class="velocity-value">0.0</span>
+                    <span class="velocity-unit">/s</span>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Stream Info -->
+        <div id="stream-info" class="hidden">
+            <div class="stream-title" id="stream-title">No stream detected</div>
+            <div class="stream-channel" id="stream-channel"></div>
+        </div>
+        
+        <!-- No Stream State -->
+        <div id="no-stream" class="state-panel">
+            <div class="state-icon">📺</div>
+            <h2>No Live Stream Detected</h2>
+            <p>Navigate to a YouTube Live stream to see chat intelligence</p>
+        </div>
+        
+        <!-- Connecting State -->
+        <div id="connecting" class="state-panel hidden">
+            <div class="state-icon spinning">⚡</div>
+            <h2>Connecting...</h2>
+            <p id="connecting-video"></p>
+        </div>
+        
+        <!-- Main Visualization -->
+        <div id="visualization" class="hidden">
+            <!-- Topic Bubbles -->
+            <section id="topics-section">
+                <div class="section-header">
+                    <h2>Topic Clusters</h2>
+                    <div class="legend">
+                        <span class="legend-item bullish">▲ Bullish</span>
+                        <span class="legend-item bearish">▼ Bearish</span>
+                    </div>
+                </div>
+                <div id="topics-container" class="topics-grid">
+                    <div class="empty-state">Waiting for ticker mentions...</div>
+                </div>
+            </section>
+            
+            <!-- Questions Panel -->
+            <section id="questions-section">
+                <div class="section-header">
+                    <h2>Questions</h2>
+                    <span class="live-badge">● LIVE</span>
+                </div>
+                <div id="questions-container">
+                    <div class="empty-state">No questions yet...</div>
+                </div>
+            </section>
+            
+            <!-- Chat Pulse -->
+            <section id="pulse-section">
+                <div class="section-header">
+                    <h2>Chat Pulse</h2>
+                </div>
+                <div id="pulse-container">
+                    <div class="empty-state">Generating first summary...</div>
+                </div>
+            </section>
+            
+            <!-- Vibes Ticker -->
+            <section id="vibes-section">
+                <div class="section-header">
+                    <h2>Community Vibes</h2>
+                    <div class="vibe-legend">
+                        <span class="vibe-tag funny">😂 Funny</span>
+                        <span class="vibe-tag uplifting">💖 Uplifting</span>
+                    </div>
+                </div>
+                <div id="vibes-ticker" class="vibes-marquee">
+                    <div class="empty-state">Waiting for vibes...</div>
+                </div>
+            </section>
+        </div>
+        
+        <!-- Error State -->
+        <div id="error-state" class="state-panel hidden">
+            <div class="state-icon">⚠️</div>
+            <h2>Connection Error</h2>
+            <p id="error-message">Unable to connect to backend</p>
+            <button id="retry-button" class="btn-primary">Retry Connection</button>
+        </div>
+    </div>
+    
+    <script src="panel.js"></script>
+</body>
+</html>

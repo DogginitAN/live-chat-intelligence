@@ -1,0 +1,640 @@
+/* Live Chat Intelligence - Side Panel Styles */
+
+:root {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #111118;
+    --bg-tertiary: #1a1a24;
+    --border-color: #2a2a3a;
+    --text-primary: #e5e5e5;
+    --text-secondary: #a0a0a0;
+    --text-muted: #606070;
+    --green: #22c55e;
+    --green-dim: rgba(34, 197, 94, 0.2);
+    --red: #ef4444;
+    --red-dim: rgba(239, 68, 68, 0.2);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59, 130, 246, 0.2);
+    --yellow: #eab308;
+    --yellow-dim: rgba(234, 179, 8, 0.2);
+    --purple: #9333ea;
+    --purple-dim: rgba(147, 51, 234, 0.2);
+    --pink: #ec4899;
+    --pink-dim: rgba(236, 72, 153, 0.2);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 1.4;
+    overflow-x: hidden;
+}
+
+#app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ============== HEADER ============== */
+
+#header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+#header h1 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Pop Out Button */
+.popout-btn {
+    width: 32px;
+    height: 32px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.popout-btn:hover {
+    background: var(--blue-dim);
+    border-color: var(--blue);
+    color: var(--blue);
+}
+
+/* Connection Status */
+.status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.status.connected .status-dot {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+}
+
+.status.disconnected .status-dot {
+    background: var(--red);
+}
+
+.status.connecting .status-dot {
+    background: var(--yellow);
+    animation: pulse 1s infinite;
+}
+
+/* Velocity Display */
+#velocity-display {
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+}
+
+.velocity-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-right: 4px;
+}
+
+.velocity-value {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'SF Mono', Monaco, monospace;
+    color: var(--text-primary);
+    min-width: 32px;
+    text-align: right;
+}
+
+.velocity-unit {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+#velocity-display.quiet .velocity-value { color: var(--text-muted); }
+#velocity-display.active .velocity-value { color: var(--blue); }
+#velocity-display.busy .velocity-value { color: var(--yellow); }
+#velocity-display.hype .velocity-value { color: var(--red); }
+
+/* ============== STREAM INFO ============== */
+
+#stream-info {
+    padding: 10px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.stream-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.stream-channel {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+/* ============== STATE PANELS ============== */
+
+.state-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+.state-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.state-icon.spinning {
+    animation: spin 1s linear infinite;
+}
+
+.state-panel h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.state-panel p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    max-width: 280px;
+}
+
+/* ============== MAIN VISUALIZATION ============== */
+
+#visualization {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--border-color);
+}
+
+section {
+    background: var(--bg-primary);
+    padding: 12px 16px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.section-header h2 {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+}
+
+.live-badge {
+    font-size: 10px;
+    color: var(--yellow);
+    animation: pulse 2s infinite;
+}
+
+.legend {
+    display: flex;
+    gap: 12px;
+    font-size: 10px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+}
+
+.legend-item.bullish { color: var(--green); }
+.legend-item.bearish { color: var(--red); }
+
+/* ============== TOPICS ============== */
+
+#topics-section {
+    min-height: 200px;
+}
+
+.topics-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-end;
+}
+
+.topic-bubble {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+}
+
+.topic-bubble:hover {
+    transform: scale(1.1);
+    z-index: 10;
+}
+
+.topic-bubble .ticker {
+    font-weight: 700;
+    line-height: 1;
+}
+
+.topic-bubble .count {
+    font-weight: 300;
+    opacity: 0.9;
+}
+
+.topic-bubble .sentiment-bar {
+    position: absolute;
+    bottom: 6px;
+    left: 8px;
+    right: 8px;
+    height: 3px;
+    background: var(--bg-tertiary);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.topic-bubble .sentiment-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.topic-bubble.bullish { 
+    background: var(--green-dim); 
+    border: 2px solid var(--green);
+}
+.topic-bubble.bearish { 
+    background: var(--red-dim); 
+    border: 2px solid var(--red);
+}
+.topic-bubble.contested { 
+    background: linear-gradient(135deg, var(--green-dim), var(--red-dim)); 
+    border: 2px solid var(--text-muted);
+}
+
+.topic-bubble.bullish .ticker { color: var(--green); }
+.topic-bubble.bearish .ticker { color: var(--red); }
+.topic-bubble.contested .ticker { color: var(--text-primary); }
+
+/* Recent flash effect */
+.topic-bubble.recent {
+    animation: flash 0.5s ease-out;
+}
+
+/* ============== QUESTIONS ============== */
+
+#questions-section {
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+#questions-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.question-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--yellow-dim);
+    border-radius: 8px;
+    padding: 10px 12px;
+    transition: all 0.3s ease;
+}
+
+.question-card.recent {
+    border-color: var(--yellow);
+    box-shadow: 0 0 12px var(--yellow-dim);
+}
+
+.question-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.question-topic {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--yellow);
+}
+
+.question-count {
+    font-size: 10px;
+    background: var(--yellow-dim);
+    color: var(--yellow);
+    padding: 2px 6px;
+    border-radius: 10px;
+}
+
+.question-text {
+    font-size: 12px;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.question-author {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+/* ============== CHAT PULSE ============== */
+
+#pulse-section {
+    min-height: 80px;
+}
+
+#pulse-container {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+}
+
+#pulse-container::-webkit-scrollbar {
+    height: 4px;
+}
+
+#pulse-container::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: 2px;
+}
+
+#pulse-container::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 2px;
+}
+
+.pulse-card {
+    flex-shrink: 0;
+    max-width: 220px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 12px;
+    transition: all 0.3s ease;
+}
+
+.pulse-card.newest {
+    border-color: var(--blue-dim);
+    box-shadow: 0 0 15px var(--blue-dim);
+}
+
+.pulse-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.pulse-mood {
+    font-size: 16px;
+}
+
+.pulse-content {
+    flex: 1;
+}
+
+.pulse-summary {
+    font-size: 12px;
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+
+.pulse-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.pulse-ticker {
+    font-size: 10px;
+    background: var(--blue-dim);
+    color: var(--blue);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.pulse-time {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+/* ============== VIBES ============== */
+
+#vibes-section {
+    border-top: 1px solid var(--border-color);
+}
+
+.vibe-legend {
+    display: flex;
+    gap: 8px;
+}
+
+.vibe-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.vibe-tag.funny {
+    background: var(--purple-dim);
+    color: var(--purple);
+}
+
+.vibe-tag.uplifting {
+    background: var(--pink-dim);
+    color: var(--pink);
+}
+
+.vibes-marquee {
+    position: relative;
+    overflow: hidden;
+    height: 36px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+}
+
+.vibes-track {
+    display: flex;
+    gap: 16px;
+    padding: 6px 12px;
+    animation: marquee 30s linear infinite;
+    white-space: nowrap;
+}
+
+.vibes-track:hover {
+    animation-play-state: paused;
+}
+
+.vibe-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-size: 12px;
+}
+
+.vibe-item.funny {
+    background: var(--purple-dim);
+    border: 1px solid rgba(147, 51, 234, 0.3);
+}
+
+.vibe-item.uplifting {
+    background: var(--pink-dim);
+    border: 1px solid rgba(236, 72, 153, 0.3);
+}
+
+.vibe-emoji {
+    font-size: 14px;
+}
+
+.vibe-text {
+    color: var(--text-primary);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ============== EMPTY STATES ============== */
+
+.empty-state {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-style: italic;
+    padding: 20px;
+    text-align: center;
+}
+
+/* ============== BUTTONS ============== */
+
+.btn-primary {
+    background: var(--blue);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 16px;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+    transform: translateY(-1px);
+}
+
+/* ============== UTILITIES ============== */
+
+.hidden {
+    display: none !important;
+}
+
+/* ============== ANIMATIONS ============== */
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes flash {
+    0% { box-shadow: 0 0 0 0 currentColor; }
+    50% { box-shadow: 0 0 20px 5px currentColor; }
+    100% { box-shadow: 0 0 0 0 currentColor; }
+}
+
+@keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+
+@keyframes slideIn {
+    from { 
+        opacity: 0; 
+        transform: translateX(-20px); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateX(0); 
+    }
+}
+
+.slide-in {
+    animation: slideIn 0.4s ease-out;
+}
