@@ -343,9 +343,9 @@ def detect_spam(text: str, author: str, user_history: dict) -> dict:
     if author in user_history:
         recent_timestamps = [ts for ts, _ in user_history[author]]
         recent_10s = [ts for ts in recent_timestamps if current_time - ts < 10]
-        if len(recent_10s) >= 3:
+        if len(recent_10s) >= 5:  # Was 3 - more lenient for active chatters
             reasons.append('rapid_fire')
-            confidence = max(confidence, 0.8)
+            confidence = max(confidence, 0.6)  # Was 0.8 - triggers LLM check, not auto-drop
     
     if SPAM_LINK_RE.search(text):
         reasons.append('promo_link')
@@ -514,7 +514,13 @@ def process_message(chat_msg, video_state: dict) -> dict:
     text = convert_emoji_codes(chat_msg.message)
     author = chat_msg.author.name
     
-    spam_result = detect_spam(text, author, video_state['user_message_history'])
+    # Skip spam detection for channel owner and moderators
+    is_privileged = getattr(chat_msg.author, 'isChatOwner', False) or getattr(chat_msg.author, 'isChatModerator', False)
+    
+    if is_privileged:
+        spam_result = {'is_spam': False, 'reason': None, 'reasons': [], 'confidence': 0.0}
+    else:
+        spam_result = detect_spam(text, author, video_state['user_message_history'])
     
     result = {
         'text': text,
