@@ -34,22 +34,26 @@
         
         #visualization > section {
             background: var(--bg-primary);
-            overflow: auto;
+            overflow: hidden;
         }
         
-        /* Topic clusters - main area */
+        /* Topic clusters - main area, uses available height */
         #topics-section {
             grid-column: 1;
             grid-row: 1;
-            min-height: 300px;
+            min-height: 350px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #topics-section .section-header {
+            flex-shrink: 0;
         }
         
         .topics-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            padding: 16px;
-            align-content: flex-start;
+            position: relative;
+            flex: 1;
+            min-height: 320px;
         }
         
         /* Scale bubbles based on viewport */
@@ -58,27 +62,31 @@
             min-height: 70px;
         }
         
-        /* Questions panel - right side */
+        /* Community Vibes - under topics, left side only */
+        #vibes-section {
+            grid-column: 1;
+            grid-row: 2;
+            border-top: 1px solid var(--border-color);
+            min-height: 220px;
+        }
+        
+        #vibes-section .vibes-cluster {
+            height: 180px;
+        }
+        
+        /* Questions panel - right side, spans topics + vibes */
         #questions-section {
             grid-column: 2;
-            grid-row: 1;
+            grid-row: 1 / 3;
             max-height: none;
             border-left: 1px solid var(--border-color);
         }
         
-        /* Chat Pulse - full width */
+        /* Chat Pulse - full width bottom */
         #pulse-section {
-            grid-column: 1 / 3;
-            grid-row: 2;
-            border-top: 1px solid var(--border-color);
-        }
-        
-        /* Vibes - full width bottom */
-        #vibes-section {
             grid-column: 1 / 3;
             grid-row: 3;
             border-top: 1px solid var(--border-color);
-            max-height: 80px;
         }
         
         /* URL input for standalone mode */
@@ -147,28 +155,30 @@
         @media (max-width: 800px) {
             #visualization {
                 grid-template-columns: 1fr;
-                grid-template-rows: 1fr auto auto auto;
+                grid-template-rows: auto auto auto auto;
             }
             
             #topics-section {
                 grid-column: 1;
                 grid-row: 1;
+                min-height: 280px;
+            }
+            
+            #vibes-section {
+                grid-column: 1;
+                grid-row: 2;
+                min-height: 180px;
             }
             
             #questions-section {
                 grid-column: 1;
-                grid-row: 2;
+                grid-row: 3;
                 border-left: none;
                 border-top: 1px solid var(--border-color);
                 max-height: 200px;
             }
             
             #pulse-section {
-                grid-column: 1;
-                grid-row: 3;
-            }
-            
-            #vibes-section {
                 grid-column: 1;
                 grid-row: 4;
             }
@@ -180,20 +190,39 @@
                 grid-template-columns: 1fr 400px;
             }
             
+            #topics-section {
+                min-height: 450px;
+            }
+            
+            #vibes-section {
+                min-height: 260px;
+            }
+            
+            #vibes-section .vibes-cluster {
+                height: 220px;
+            }
+            
             .topic-bubble {
                 min-width: 80px;
                 min-height: 80px;
-            }
-            
-            .topics-grid {
-                gap: 16px;
-                padding: 24px;
             }
         }
         
         @media (min-width: 1600px) {
             #visualization {
                 grid-template-columns: 1fr 450px;
+            }
+            
+            #topics-section {
+                min-height: 500px;
+            }
+            
+            #vibes-section {
+                min-height: 300px;
+            }
+            
+            #vibes-section .vibes-cluster {
+                height: 260px;
             }
             
             .topic-bubble {
@@ -289,7 +318,7 @@
                 </div>
             </section>
             
-            <!-- Vibes Ticker -->
+            <!-- Vibes - Rising Bubbles -->
             <section id="vibes-section">
                 <div class="section-header">
                     <h2>Community Vibes</h2>
@@ -298,7 +327,7 @@
                         <span class="vibe-tag uplifting">💖 Uplifting</span>
                     </div>
                 </div>
-                <div id="vibes-ticker" class="vibes-marquee">
+                <div id="vibes-container" class="vibes-cluster">
                     <div class="empty-state">Waiting for vibes...</div>
                 </div>
             </section>

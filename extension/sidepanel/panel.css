@@ -271,43 +271,73 @@ section {
 .legend-item.bullish { color: var(--green); }
 .legend-item.bearish { color: var(--red); }
 
-/* ============== TOPICS ============== */
+/* ============== TOPICS - LIQUID PHYSICS ============== */
 
 #topics-section {
-    min-height: 200px;
+    min-height: 220px;
 }
 
 .topics-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: flex-end;
+    position: relative;
+    width: 100%;
+    height: 200px;
+    background: radial-gradient(ellipse at center, rgba(20, 20, 35, 0.4) 0%, transparent 70%);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* Subtle depth field in center */
+.topics-grid::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.015) 0%, transparent 50%);
+    pointer-events: none;
 }
 
 .topic-bubble {
+    position: absolute;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    transition: all 0.3s ease;
     cursor: pointer;
-    position: relative;
+    will-change: left, top, transform;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
 }
 
 .topic-bubble:hover {
-    transform: scale(1.1);
-    z-index: 10;
+    transform: scale(1.08) !important;
+    z-index: 100 !important;
+}
+
+/* Inner highlight reflection for liquid/glass effect */
+.topic-bubble::before {
+    content: '';
+    position: absolute;
+    top: 12%;
+    left: 20%;
+    width: 25%;
+    height: 15%;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.07);
+    filter: blur(2px);
+    pointer-events: none;
 }
 
 .topic-bubble .ticker {
     font-weight: 700;
     line-height: 1;
+    position: relative;
+    z-index: 1;
 }
 
 .topic-bubble .count {
     font-weight: 300;
-    opacity: 0.9;
+    opacity: 0.7;
+    position: relative;
+    z-index: 1;
 }
 
 .topic-bubble .sentiment-bar {
@@ -326,26 +356,134 @@ section {
     transition: width 0.3s ease;
 }
 
+/* Sentiment styling with glow */
 .topic-bubble.bullish { 
-    background: var(--green-dim); 
-    border: 2px solid var(--green);
+    background: radial-gradient(ellipse at 30% 30%, rgba(34, 197, 94, 0.15), rgba(0, 0, 0, 0.2));
+    border: 1.5px solid var(--green);
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2), inset 0 0 12px rgba(34, 197, 94, 0.15);
 }
 .topic-bubble.bearish { 
-    background: var(--red-dim); 
-    border: 2px solid var(--red);
+    background: radial-gradient(ellipse at 30% 30%, rgba(239, 68, 68, 0.15), rgba(0, 0, 0, 0.2));
+    border: 1.5px solid var(--red);
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2), inset 0 0 12px rgba(239, 68, 68, 0.15);
 }
 .topic-bubble.contested { 
-    background: linear-gradient(135deg, var(--green-dim), var(--red-dim)); 
-    border: 2px solid var(--text-muted);
+    background: radial-gradient(ellipse at 30% 30%, rgba(148, 163, 184, 0.1), rgba(0, 0, 0, 0.2));
+    border: 1.5px solid var(--text-muted);
+    box-shadow: 0 0 15px rgba(148, 163, 184, 0.15), inset 0 0 10px rgba(148, 163, 184, 0.1);
 }
 
-.topic-bubble.bullish .ticker { color: var(--green); }
-.topic-bubble.bearish .ticker { color: var(--red); }
-.topic-bubble.contested .ticker { color: var(--text-primary); }
+.topic-bubble.bullish .ticker { color: #4ade80; text-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
+.topic-bubble.bearish .ticker { color: #f87171; text-shadow: 0 0 8px rgba(239, 68, 68, 0.4); }
+.topic-bubble.contested .ticker { color: #94a3b8; }
 
-/* Recent flash effect */
-.topic-bubble.recent {
-    animation: flash 0.5s ease-out;
+/* Glow intensifies with mentions */
+.topic-bubble.glow-high.bullish {
+    box-shadow: 0 0 30px rgba(34, 197, 94, 0.35), inset 0 0 20px rgba(34, 197, 94, 0.25);
+}
+.topic-bubble.glow-high.bearish {
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.35), inset 0 0 20px rgba(239, 68, 68, 0.25);
+}
+.topic-bubble.glow-high.contested {
+    box-shadow: 0 0 25px rgba(148, 163, 184, 0.3), inset 0 0 18px rgba(148, 163, 184, 0.2);
+}
+
+/* Topic bubble tooltip on hover */
+.topic-bubble .bubble-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-width: 160px;
+    max-width: 220px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+    z-index: 200;
+    pointer-events: none;
+}
+
+.topic-bubble:hover .bubble-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+.bubble-tooltip .tooltip-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.bubble-tooltip .tooltip-ticker {
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.bubble-tooltip .tooltip-sentiment {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.bubble-tooltip .tooltip-sentiment.bullish {
+    background: var(--green-dim);
+    color: var(--green);
+}
+
+.bubble-tooltip .tooltip-sentiment.bearish {
+    background: var(--red-dim);
+    color: var(--red);
+}
+
+.bubble-tooltip .tooltip-sentiment.contested {
+    background: rgba(148, 163, 184, 0.2);
+    color: var(--text-secondary);
+}
+
+.bubble-tooltip .tooltip-comments {
+    font-size: 10px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.bubble-tooltip .tooltip-comment {
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.bubble-tooltip .tooltip-comment:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.bubble-tooltip .comment-sentiment {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+.bubble-tooltip .comment-sentiment.bullish { background: var(--green); }
+.bubble-tooltip .comment-sentiment.bearish { background: var(--red); }
+.bubble-tooltip .comment-sentiment.neutral { background: var(--text-muted); }
+
+/* Soft pulse on update */
+.topic-bubble.pulse {
+    animation: softPulse 0.6s ease-out;
+}
+
+@keyframes softPulse {
+    0% { transform: scale(1); }
+    30% { transform: scale(1.06); }
+    100% { transform: scale(1); }
 }
 
 /* ============== QUESTIONS ============== */
@@ -441,6 +579,15 @@ section {
     border-radius: 10px;
     padding: 10px 12px;
     transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.pulse-card:hover {
+    width: max-content;  /* Grow to fit expanded text */
+    max-width: 400px;
+    border-color: var(--blue-dim);
+    box-shadow: 0 0 20px var(--blue-dim);
+    z-index: 10;
 }
 
 .pulse-card.newest {
@@ -466,6 +613,18 @@ section {
     font-size: 12px;
     color: var(--text-primary);
     line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: all 0.3s ease;
+}
+
+.pulse-card:hover .pulse-summary {
+    display: block;  /* Release from -webkit-box to show full text */
+    -webkit-line-clamp: unset;
+    overflow: visible;
 }
 
 .pulse-meta {
@@ -488,10 +647,11 @@ section {
     color: var(--text-muted);
 }
 
-/* ============== VIBES ============== */
+/* ============== VIBES - RISING BUBBLES ============== */
 
 #vibes-section {
     border-top: 1px solid var(--border-color);
+    min-height: 180px;
 }
 
 .vibe-legend {
@@ -515,6 +675,113 @@ section {
     color: var(--pink);
 }
 
+/* Rising Bubbles Container */
+.vibes-cluster {
+    position: relative;
+    width: 100%;
+    height: 160px;
+    background: linear-gradient(180deg, rgba(20, 20, 30, 0.3) 0%, rgba(20, 20, 30, 0.7) 100%);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* Fade gradient at top */
+.vibes-cluster::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 35px;
+    background: linear-gradient(180deg, rgba(10, 10, 15, 0.95) 0%, transparent 100%);
+    z-index: 10;
+    pointer-events: none;
+}
+
+/* Ambient particles container */
+.vibes-particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.ambient-particle {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    opacity: 0;
+    animation: floatParticle linear infinite;
+}
+
+.ambient-particle.purple {
+    background: rgba(147, 51, 234, 0.6);
+    box-shadow: 0 0 6px rgba(147, 51, 234, 0.4);
+}
+
+.ambient-particle.pink {
+    background: rgba(236, 72, 153, 0.6);
+    box-shadow: 0 0 6px rgba(236, 72, 153, 0.4);
+}
+
+@keyframes floatParticle {
+    0% {
+        transform: translateY(0) translateX(0);
+        opacity: 0;
+    }
+    10% {
+        opacity: 0.8;
+    }
+    90% {
+        opacity: 0.8;
+    }
+    100% {
+        transform: translateY(-180px) translateX(var(--drift, 10px));
+        opacity: 0;
+    }
+}
+
+/* Individual rising bubble */
+.vibe-bubble {
+    position: absolute;
+    max-width: 200px;
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    color: var(--text-primary);
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    backdrop-filter: blur(8px);
+    will-change: transform, opacity, left, top;
+    pointer-events: none;
+    transform-origin: center center;
+}
+
+.vibe-bubble.funny {
+    background: rgba(147, 51, 234, 0.25);
+    border: 1px solid rgba(147, 51, 234, 0.4);
+    box-shadow: 0 0 20px rgba(147, 51, 234, 0.2);
+}
+
+.vibe-bubble.uplifting {
+    background: rgba(236, 72, 153, 0.25);
+    border: 1px solid rgba(236, 72, 153, 0.4);
+    box-shadow: 0 0 20px rgba(236, 72, 153, 0.2);
+}
+
+.vibe-bubble .vibe-emoji {
+    margin-right: 6px;
+    font-size: 12px;
+}
+
+.vibe-bubble .vibe-text {
+    color: var(--text-primary);
+}
+
+/* Legacy marquee styles (keeping for fallback) */
 .vibes-marquee {
     position: relative;
     overflow: hidden;

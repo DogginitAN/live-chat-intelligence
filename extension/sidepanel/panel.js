@@ -15,6 +15,7 @@ const state = {
     
     // Data
     topics: {},
+    topicComments: {},  // ticker -> [{text, author, sentiment, time}]
     questions: [],
     pulses: [],
     vibes: [],
@@ -30,6 +31,36 @@ const MAX_QUESTIONS = 5;
 const MAX_PULSES = 7;
 const MAX_VIBES = 16;
 const QUESTION_TTL = 30000;
+
+// Physics constants - LIQUID FEEL
+const PHYSICS = {
+    GRAVITY_STRENGTH: 0.00004,      // Reduced - gentler pull
+    DAMPING: 0.96,                   // Less damping - more momentum
+    COLLISION_RESPONSE: 0.06,        // Softer collisions
+    DRIFT_STRENGTH: 0.025,           // Much more brownian motion
+    CENTER_PULL_MULTIPLIER: 0.3,     // Weaker center pull
+    MAX_VELOCITY: 1.8,               // Allow faster movement
+    COLLISION_SOFTNESS: 0.5,
+    ORBIT_TENDENCY: 0.03,            // Slow swirl/orbit motion (was 0.15)
+    MASS_ATTRACTION: 0.00003         // Larger bubbles attract smaller
+};
+
+// Physics state for topic bubbles
+const bubblePhysics = {};  // ticker -> { x, y, vx, vy, radius }
+let physicsAnimationId = null;
+
+// Rising vibes state
+const risingVibes = {};  // id -> { x, y, wobbleOffset, wobbleSpeed, scale, startTime, duration }
+let vibesAnimationId = null;
+let particleIntervalId = null;
+
+// Vibe drip queue - releases vibes organically instead of in batches
+const vibeQueue = [];
+let vibeDripIntervalId = null;
+let lastBatchTime = null;
+let estimatedBatchInterval = 30000;  // Start with 30s estimate, will adapt
+const MIN_DRIP_DELAY = 300;          // Never faster than 300ms
+const MAX_DRIP_DELAY = 5000;         // Never slower than 5s
 
 // ============== DOM REFERENCES ==============
 
@@ -51,7 +82,7 @@ const elements = {
     topicsContainer: document.getElementById('topics-container'),
     questionsContainer: document.getElementById('questions-container'),
     pulseContainer: document.getElementById('pulse-container'),
-    vibesTicker: document.getElementById('vibes-ticker')
+    vibesContainer: document.getElementById('vibes-container')
 };
 
 // Port connection to background
@@ -385,18 +416,82 @@ function processMessage(msg) {
 function processVibe(msg) {
     if (!msg.vibe) return;
     
-    state.vibes.push({
+    const now = Date.now();
+    const queueWasEmpty = vibeQueue.length === 0;
+    
+    // Queue the vibe for organic release
+    vibeQueue.push({
         text: msg.text,
         vibe: msg.vibe,
-        time: Date.now(),
-        id: Date.now() + Math.random()
+        queuedAt: now
     });
     
-    if (state.vibes.length > MAX_VIBES) {
-        state.vibes = state.vibes.slice(-MAX_VIBES);
+    // Track batch timing - if queue was empty, this is a new batch
+    if (queueWasEmpty && lastBatchTime) {
+        const timeSinceLastBatch = now - lastBatchTime;
+        // Smooth the estimate (weighted average)
+        estimatedBatchInterval = estimatedBatchInterval * 0.3 + timeSinceLastBatch * 0.7;
+        console.log('[Panel] Batch interval estimate:', Math.round(estimatedBatchInterval / 1000) + 's');
     }
     
-    renderVibes();
+    if (queueWasEmpty) {
+        lastBatchTime = now;
+    }
+    
+    // Start drip process if not running
+    startVibeDrip();
+}
+
+function startVibeDrip() {
+    if (vibeDripIntervalId) return;  // Already running
+    
+    function dripNextVibe() {
+        if (vibeQueue.length === 0) {
+            // Queue empty, stop dripping
+            vibeDripIntervalId = null;
+            return;
+        }
+        
+        // Release one vibe
+        const vibe = vibeQueue.shift();
+        
+        state.vibes.push({
+            text: vibe.text,
+            vibe: vibe.vibe,
+            time: Date.now(),
+            id: Date.now() + Math.random()
+        });
+        
+        if (state.vibes.length > MAX_VIBES) {
+            state.vibes = state.vibes.slice(-MAX_VIBES);
+        }
+        
+        renderVibes();
+        
+        // Calculate delay to spread remaining vibes across the expected batch window
+        // If we have 5 vibes and expect 25s until next batch, drip every 5s
+        const remainingVibes = vibeQueue.length + 1;  // +1 for timing headroom
+        const timeSinceBatch = Date.now() - (lastBatchTime || Date.now());
+        const timeUntilNextBatch = Math.max(estimatedBatchInterval - timeSinceBatch, 5000);
+        
+        let delay = timeUntilNextBatch / remainingVibes;
+        
+        // Velocity multiplier - faster chat = faster drip (popcorn effect!)
+        // velocity 0-1 = normal, 2+ = double speed, 4+ = triple speed
+        const velocityMultiplier = 1 / Math.max(1, 1 + (state.velocity * 0.5));
+        delay = delay * velocityMultiplier;
+        
+        // Add small random jitter (±15%) for organic feel
+        delay = delay * (0.85 + Math.random() * 0.3);
+        
+        // Clamp to reasonable bounds
+        delay = Math.max(MIN_DRIP_DELAY, Math.min(MAX_DRIP_DELAY, delay));
+        
+        vibeDripIntervalId = setTimeout(dripNextVibe, delay);
+    }
+    
+    // Start with a small initial delay
+    vibeDripIntervalId = setTimeout(dripNextVibe, 200);
 }
 
 function processPulse(data) {
@@ -424,36 +519,289 @@ function renderTopics() {
     
     if (sorted.length === 0) {
         elements.topicsContainer.innerHTML = '<div class="empty-state">Waiting for ticker mentions...</div>';
+        stopPhysicsLoop();
         return;
     }
     
+    const container = elements.topicsContainer;
+    const containerRect = container.getBoundingClientRect();
+    const centerX = containerRect.width / 2;
+    const centerY = containerRect.height / 2;
     const now = Date.now();
     
-    elements.topicsContainer.innerHTML = sorted.map(([ticker, data]) => {
+    // Find max count for relative sizing
+    const maxCount = sorted.length > 0 ? sorted[0][1].count : 1;
+    const minSize = 45;
+    const maxSize = 140;
+    
+    // Initialize or update physics state for each bubble
+    sorted.forEach(([ticker, data], index) => {
+        // Relative sizing - ratio of this ticker to the top ticker
+        const ratio = data.count / maxCount;  // 0 to 1
+        const size = minSize + (ratio * (maxSize - minSize));
+        const radius = size / 2;
+        
+        if (!bubblePhysics[ticker]) {
+            // New bubble - spawn at random position around edge
+            const angle = (index / sorted.length) * Math.PI * 2 + Math.random() * 0.5;
+            const dist = 80 + Math.random() * 40;
+            bubblePhysics[ticker] = {
+                x: centerX + Math.cos(angle) * dist,
+                y: centerY + Math.sin(angle) * dist,
+                vx: (Math.random() - 0.5) * 0.15,
+                vy: (Math.random() - 0.5) * 0.15,
+                radius: radius,
+                count: data.count
+            };
+        } else {
+            // Existing bubble - check if count increased (trigger pulse)
+            const wasCount = bubblePhysics[ticker].count;
+            bubblePhysics[ticker].radius = radius;
+            bubblePhysics[ticker].count = data.count;
+            if (data.count > wasCount) {
+                bubblePhysics[ticker].justUpdated = true;
+            }
+        }
+    });
+    
+    // Remove physics for tickers no longer in top list
+    const activeTickers = new Set(sorted.map(([t]) => t));
+    Object.keys(bubblePhysics).forEach(ticker => {
+        if (!activeTickers.has(ticker)) {
+            delete bubblePhysics[ticker];
+        }
+    });
+    
+    // Render bubbles (DOM update)
+    updateBubbleDOM(sorted, centerX, centerY);
+    
+    // Start physics loop if not running
+    startPhysicsLoop(centerX, centerY, containerRect.width, containerRect.height);
+}
+
+function updateBubbleDOM(sorted, centerX, centerY) {
+    const now = Date.now();
+    const container = elements.topicsContainer;
+    
+    // Build map of existing DOM elements
+    const existingElements = {};
+    container.querySelectorAll('.topic-bubble').forEach(el => {
+        const ticker = el.dataset.ticker;
+        if (ticker) existingElements[ticker] = el;
+    });
+    
+    sorted.forEach(([ticker, data]) => {
+        const physics = bubblePhysics[ticker];
+        if (!physics) return;
+        
         const total = data.sentiment.bullish + data.sentiment.bearish;
         const bullishRatio = total === 0 ? 0.5 : data.sentiment.bullish / total;
         const contested = total > 0 && Math.min(data.sentiment.bullish, data.sentiment.bearish) / Math.max(data.sentiment.bullish, data.sentiment.bearish) > 0.5;
-        
-        const baseSize = 56;
-        const growthFactor = Math.log2(data.count + 1) * 12;
-        const size = Math.min(100, baseSize + growthFactor);
-        
-        const isRecent = now - data.lastUpdate < 2000;
         const sentimentClass = contested ? 'contested' : (bullishRatio > 0.5 ? 'bullish' : 'bearish');
+        const size = physics.radius * 2;
+        const glowHigh = data.count >= 10;
         
-        return `
-            <div class="topic-bubble ${sentimentClass} ${isRecent ? 'recent' : ''}" 
-                 style="width: ${size}px; height: ${size}px;">
-                <span class="ticker" style="font-size: ${Math.max(10, size / 5)}px">${ticker}</span>
-                <span class="count" style="font-size: ${Math.max(12, size / 4)}px">${data.count}</span>
-                ${size >= 70 ? `
-                    <div class="sentiment-bar">
-                        <div class="sentiment-fill" style="width: ${bullishRatio * 100}%; background: linear-gradient(90deg, var(--green), var(--green))"></div>
+        // Sentiment label for tooltip
+        const sentimentLabel = contested ? 'Mixed' : (bullishRatio > 0.5 ? 'Bullish' : 'Bearish');
+        const sentimentPercent = Math.round((bullishRatio > 0.5 ? bullishRatio : 1 - bullishRatio) * 100);
+        
+        let el = existingElements[ticker];
+        
+        if (!el) {
+            // Create new element with tooltip
+            el = document.createElement('div');
+            el.className = `topic-bubble ${sentimentClass}`;
+            el.dataset.ticker = ticker;
+            el.innerHTML = `
+                <span class="ticker"></span>
+                <span class="count"></span>
+                <div class="bubble-tooltip">
+                    <div class="tooltip-header">
+                        <span class="tooltip-ticker">${ticker}</span>
+                        <span class="tooltip-sentiment ${sentimentClass}">${sentimentLabel} ${sentimentPercent}%</span>
                     </div>
-                ` : ''}
-            </div>
-        `;
-    }).join('');
+                    <div class="tooltip-comments"></div>
+                </div>
+            `;
+            container.appendChild(el);
+        }
+        
+        // Update classes
+        el.className = `topic-bubble ${sentimentClass}${glowHigh ? ' glow-high' : ''}`;
+        
+        // Trigger pulse animation on update
+        if (physics.justUpdated) {
+            el.classList.add('pulse');
+            setTimeout(() => el.classList.remove('pulse'), 600);
+            physics.justUpdated = false;
+        }
+        
+        // Update position and size
+        el.style.left = `${physics.x - physics.radius}px`;
+        el.style.top = `${physics.y - physics.radius}px`;
+        el.style.width = `${size}px`;
+        el.style.height = `${size}px`;
+        el.style.zIndex = Math.floor(data.count);
+        
+        // Update text
+        const tickerSpan = el.querySelector('.ticker');
+        const countSpan = el.querySelector('.count');
+        tickerSpan.textContent = ticker;
+        tickerSpan.style.fontSize = `${Math.max(10, size * 0.22)}px`;
+        countSpan.textContent = data.count;
+        countSpan.style.fontSize = `${Math.max(9, size * 0.16)}px`;
+        
+        // Update tooltip
+        const tooltipSentiment = el.querySelector('.tooltip-sentiment');
+        const tooltipComments = el.querySelector('.tooltip-comments');
+        
+        if (tooltipSentiment) {
+            tooltipSentiment.className = `tooltip-sentiment ${sentimentClass}`;
+            tooltipSentiment.textContent = `${sentimentLabel} ${sentimentPercent}%`;
+        }
+        
+        if (tooltipComments && data.comments && data.comments.length > 0) {
+            tooltipComments.innerHTML = data.comments.slice(-3).map(c => `
+                <div class="tooltip-comment">
+                    <span class="comment-sentiment ${c.sentiment}"></span>
+                    ${escapeHtml(c.text.slice(0, 50))}${c.text.length > 50 ? '...' : ''}
+                </div>
+            `).join('');
+        } else if (tooltipComments) {
+            tooltipComments.innerHTML = '<div class="tooltip-comment" style="opacity: 0.5;">No recent comments</div>';
+        }
+        
+        delete existingElements[ticker];
+    });
+    
+    // Remove elements for tickers no longer shown
+    Object.values(existingElements).forEach(el => el.remove());
+}
+
+function startPhysicsLoop(centerX, centerY, width, height) {
+    if (physicsAnimationId) return; // Already running
+    
+    // Find max count for normalization
+    let maxCount = 1;
+    Object.values(bubblePhysics).forEach(b => {
+        if (b.count > maxCount) maxCount = b.count;
+    });
+    
+    function physicsStep() {
+        const tickers = Object.keys(bubblePhysics);
+        
+        // Recalculate max count periodically
+        maxCount = 1;
+        tickers.forEach(t => {
+            if (bubblePhysics[t].count > maxCount) maxCount = bubblePhysics[t].count;
+        });
+        
+        tickers.forEach(ticker => {
+            const b = bubblePhysics[ticker];
+            
+            // Distance from center
+            const dx = centerX - b.x;
+            const dy = centerY - b.y;
+            const distToCenter = Math.sqrt(dx * dx + dy * dy);
+            
+            const mass = b.count || 1;
+            const popularity = mass / maxCount;  // 0-1 normalized
+            
+            // Popular bubbles get pulled to center MORE strongly
+            // Less popular bubbles have weaker pull (orbit the edges)
+            const gravityForce = PHYSICS.GRAVITY_STRENGTH * (0.5 + popularity * 2) * PHYSICS.CENTER_PULL_MULTIPLIER;
+            
+            if (distToCenter > 1) {
+                b.vx += (dx / distToCenter) * gravityForce;
+                b.vy += (dy / distToCenter) * gravityForce;
+            }
+            
+            // Orbital motion - perpendicular to center direction
+            // Less popular bubbles orbit more, but slower than before (50% reduction at rim)
+            if (distToCenter > 20) {
+                const orbitStrength = PHYSICS.ORBIT_TENDENCY * (0.5 - popularity * 0.2);
+                b.vx += (-dy / distToCenter) * orbitStrength;
+                b.vy += (dx / distToCenter) * orbitStrength;
+            }
+            
+            // Brownian drift - more for smaller bubbles
+            const driftFactor = PHYSICS.DRIFT_STRENGTH * (1.5 - popularity);
+            b.vx += (Math.random() - 0.5) * driftFactor;
+            b.vy += (Math.random() - 0.5) * driftFactor;
+            
+            // Mass attraction - larger bubbles pull smaller ones
+            tickers.forEach(otherTicker => {
+                if (otherTicker === ticker) return;
+                const other = bubblePhysics[otherTicker];
+                
+                const odx = other.x - b.x;
+                const ody = other.y - b.y;
+                const dist = Math.sqrt(odx * odx + ody * ody);
+                
+                // Only attract if other is larger
+                if (other.count > b.count && dist > 0 && dist < 200) {
+                    const attractForce = PHYSICS.MASS_ATTRACTION * (other.count - b.count);
+                    b.vx += (odx / dist) * attractForce;
+                    b.vy += (ody / dist) * attractForce;
+                }
+                
+                // Soft collision
+                const minDist = b.radius + other.radius + 8;
+                if (dist < minDist && dist > 0) {
+                    const overlap = (minDist - dist) / minDist;
+                    const softOverlap = Math.pow(overlap, PHYSICS.COLLISION_SOFTNESS);
+                    const pushStrength = softOverlap * PHYSICS.COLLISION_RESPONSE;
+                    
+                    // Push away from collision
+                    b.vx -= (odx / dist) * pushStrength;
+                    b.vy -= (ody / dist) * pushStrength;
+                }
+            });
+            
+            // Velocity capping
+            const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+            if (speed > PHYSICS.MAX_VELOCITY) {
+                b.vx = (b.vx / speed) * PHYSICS.MAX_VELOCITY;
+                b.vy = (b.vy / speed) * PHYSICS.MAX_VELOCITY;
+            }
+            
+            // Apply viscous damping
+            b.vx *= PHYSICS.DAMPING;
+            b.vy *= PHYSICS.DAMPING;
+            
+            // Update position
+            b.x += b.vx;
+            b.y += b.vy;
+            
+            // Soft boundary constraints
+            const margin = b.radius + 10;
+            if (b.x < margin) { b.x = margin; b.vx *= -0.3; }
+            if (b.x > width - margin) { b.x = width - margin; b.vx *= -0.3; }
+            if (b.y < margin) { b.y = margin; b.vy *= -0.3; }
+            if (b.y > height - margin) { b.y = height - margin; b.vy *= -0.3; }
+        });
+        
+        // Update DOM positions
+        tickers.forEach(ticker => {
+            const b = bubblePhysics[ticker];
+            const el = elements.topicsContainer.querySelector(`[data-ticker="${ticker}"]`);
+            if (el) {
+                el.style.left = `${b.x - b.radius}px`;
+                el.style.top = `${b.y - b.radius}px`;
+            }
+        });
+        
+        physicsAnimationId = requestAnimationFrame(physicsStep);
+    }
+    
+    physicsAnimationId = requestAnimationFrame(physicsStep);
+}
+
+function stopPhysicsLoop() {
+    if (physicsAnimationId) {
+        cancelAnimationFrame(physicsAnimationId);
+        physicsAnimationId = null;
+    }
 }
 
 function renderQuestions() {
@@ -514,22 +862,176 @@ function renderPulses() {
 
 function renderVibes() {
     if (state.vibes.length === 0) {
-        elements.vibesTicker.innerHTML = '<div class="empty-state">Waiting for vibes...</div>';
+        elements.vibesContainer.innerHTML = '<div class="empty-state">Waiting for vibes...</div>';
+        stopVibesAnimation();
         return;
     }
     
-    const items = [...state.vibes, ...state.vibes];
+    const container = elements.vibesContainer;
     
-    elements.vibesTicker.innerHTML = `
-        <div class="vibes-track">
-            ${items.map(v => `
-                <div class="vibe-item ${v.vibe}">
-                    <span class="vibe-emoji">${v.vibe === 'funny' ? '😂' : '💖'}</span>
-                    <span class="vibe-text">${escapeHtml(v.text)}</span>
-                </div>
-            `).join('')}
-        </div>
-    `;
+    // Clear empty state if present
+    const emptyState = container.querySelector('.empty-state');
+    if (emptyState) emptyState.remove();
+    
+    // Add particles container if not present
+    if (!container.querySelector('.vibes-particles')) {
+        const particlesDiv = document.createElement('div');
+        particlesDiv.className = 'vibes-particles';
+        container.insertBefore(particlesDiv, container.firstChild);
+        startParticleSpawning();
+    }
+    
+    // Initialize physics for new vibes
+    const now = Date.now();
+    state.vibes.forEach(vibe => {
+        const vibeId = String(vibe.id);
+        if (!risingVibes[vibeId]) {
+            // New vibe - spawn at bottom with random properties
+            risingVibes[vibeId] = {
+                x: 10 + Math.random() * 70,  // 10-80% from left
+                y: 100,                       // Start at bottom
+                wobbleOffset: Math.random() * Math.PI * 2,
+                wobbleSpeed: 0.5 + Math.random() * 1,
+                scale: 0.85 + Math.random() * 0.3,
+                startTime: now,
+                duration: 10 + Math.random() * 5,  // 10-15 seconds to rise
+                vibe: vibe.vibe,
+                text: vibe.text
+            };
+            
+            // Create DOM element
+            const el = document.createElement('div');
+            el.className = `vibe-bubble ${vibe.vibe}`;
+            el.dataset.vibeId = vibeId;
+            el.innerHTML = `
+                <span class="vibe-emoji">${vibe.vibe === 'funny' ? '😂' : '💖'}</span>
+                <span class="vibe-text">${escapeHtml(vibe.text)}</span>
+            `;
+            container.appendChild(el);
+        }
+    });
+    
+    // Start animation loop if not running
+    startVibesAnimation();
+}
+
+function startParticleSpawning() {
+    if (particleIntervalId) return;  // Already running
+    
+    function spawnParticle() {
+        const container = elements.vibesContainer?.querySelector('.vibes-particles');
+        if (!container) return;
+        
+        const particle = document.createElement('div');
+        const isPurple = Math.random() > 0.5;
+        particle.className = `ambient-particle ${isPurple ? 'purple' : 'pink'}`;
+        
+        // Random position and timing
+        const leftPos = 5 + Math.random() * 90;
+        const duration = 6 + Math.random() * 4;  // 6-10 seconds
+        const delay = Math.random() * 0.5;
+        const drift = (Math.random() - 0.5) * 30;  // -15 to +15 px drift
+        const size = 2 + Math.random() * 2;  // 2-4px
+        
+        particle.style.cssText = `
+            left: ${leftPos}%;
+            bottom: 0;
+            width: ${size}px;
+            height: ${size}px;
+            --drift: ${drift}px;
+            animation-duration: ${duration}s;
+            animation-delay: ${delay}s;
+        `;
+        
+        container.appendChild(particle);
+        
+        // Remove after animation completes
+        setTimeout(() => particle.remove(), (duration + delay) * 1000 + 100);
+    }
+    
+    // Spawn initial batch
+    for (let i = 0; i < 5; i++) {
+        setTimeout(spawnParticle, i * 200);
+    }
+    
+    // Continue spawning
+    particleIntervalId = setInterval(spawnParticle, 800);
+}
+
+function stopParticleSpawning() {
+    if (particleIntervalId) {
+        clearInterval(particleIntervalId);
+        particleIntervalId = null;
+    }
+}
+
+function startVibesAnimation() {
+    if (vibesAnimationId) return;  // Already running
+    
+    function vibesStep() {
+        const now = Date.now();
+        const container = elements.vibesContainer;
+        const vibeIds = Object.keys(risingVibes);
+        
+        vibeIds.forEach(vibeId => {
+            const v = risingVibes[vibeId];
+            const elapsed = (now - v.startTime) / 1000;
+            const progress = elapsed / v.duration;
+            
+            if (progress >= 1) {
+                // Remove completed bubble
+                const el = container.querySelector(`[data-vibe-id="${vibeId}"]`);
+                if (el) el.remove();
+                delete risingVibes[vibeId];
+                return;
+            }
+            
+            // Calculate position
+            const y = 100 - (progress * 120);  // Rise from 100% to -20%
+            const wobbleX = Math.sin(elapsed * v.wobbleSpeed + v.wobbleOffset) * 3;
+            
+            // Calculate opacity (fade in at bottom, fade out at top)
+            let opacity = 1;
+            if (y > 80) opacity = (100 - y) / 20;  // Fade in
+            if (y < 15) opacity = Math.max(0, y / 15);  // Fade out
+            
+            // Update DOM
+            const el = container.querySelector(`[data-vibe-id="${vibeId}"]`);
+            if (el) {
+                el.style.left = `${v.x + wobbleX}%`;
+                el.style.top = `${y}%`;
+                el.style.opacity = opacity;
+                el.style.transform = `translate(-50%, -50%) scale(${v.scale})`;
+            }
+        });
+        
+        // Continue loop if there are still bubbles
+        if (Object.keys(risingVibes).length > 0) {
+            vibesAnimationId = requestAnimationFrame(vibesStep);
+        } else {
+            vibesAnimationId = null;
+        }
+    }
+    
+    vibesAnimationId = requestAnimationFrame(vibesStep);
+}
+
+function stopVibesAnimation() {
+    if (vibesAnimationId) {
+        cancelAnimationFrame(vibesAnimationId);
+        vibesAnimationId = null;
+    }
+    
+    // Stop particle spawning
+    stopParticleSpawning();
+    
+    // Clear all rising vibes
+    Object.keys(risingVibes).forEach(id => delete risingVibes[id]);
+    
+    // Clear DOM
+    const container = elements.vibesContainer;
+    container.querySelectorAll('.vibe-bubble').forEach(el => el.remove());
+    container.querySelectorAll('.vibes-particles').forEach(el => el.remove());
 }
 
 // ============== UI STATE MANAGEMENT ==============
@@ -613,6 +1115,10 @@ function resetData() {
     state.recentMessages = [];
     state.velocity = 0;
     
+    // Stop animations
+    stopPhysicsLoop();
+    stopVibesAnimation();
+    
     renderTopics();
     renderQuestions();
     renderPulses();
@@ -641,6 +1147,26 @@ async function retryConnection() {
 
 function handlePopOut() {
     console.log('[Panel] Pop out clicked, videoId:', state.videoId);
+    
+    // Store current state in background for standalone to pick up
+    const stateToTransfer = {
+        videoId: state.videoId,
+        streamTitle: state.streamTitle,
+        streamChannel: state.streamChannel,
+        topics: { ...state.topics },
+        questions: [...state.questions],
+        pulses: [...state.pulses],
+        vibes: [...state.vibes],
+        recentMessages: [...state.recentMessages],
+        velocity: state.velocity
+    };
+    
+    console.log('[Panel] Storing state for transfer:', Object.keys(stateToTransfer));
+    
+    chrome.runtime.sendMessage({
+        type: 'STORE_PANEL_STATE',
+        state: stateToTransfer
+    }).catch(e => console.log('[Panel] Could not store state:', e));
     
     // Build URL with video ID
     const standaloneUrl = chrome.runtime.getURL('sidepanel/standalone.html');

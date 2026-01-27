@@ -16,6 +16,9 @@ const BACKEND_URL = 'wss://web-production-6fa01.up.railway.app';
 // Track state per tab
 const tabStates = new Map();
 
+// Temporary storage for panel state transfer (panel -> standalone)
+let transferredPanelState = null;
+
 // WebSocket connection (shared across tabs watching same stream)
 let ws = null;
 let currentVideoId = null;
@@ -99,6 +102,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             // Side panel is ready, check if we should connect
             handlePanelReady(message.tabId);
             sendResponse({ success: true });
+            break;
+        
+        case 'STORE_PANEL_STATE':
+            // Panel is storing its state before opening standalone
+            console.log('[BG] Storing panel state for transfer');
+            transferredPanelState = message.state;
+            sendResponse({ success: true });
+            break;
+        
+        case 'GET_PANEL_STATE':
+            // Standalone is requesting the transferred state
+            console.log('[BG] Standalone requesting panel state, exists:', !!transferredPanelState);
+            sendResponse({ state: transferredPanelState });
+            // Clear after retrieval (one-time transfer)
+            transferredPanelState = null;
             break;
             
         default:
