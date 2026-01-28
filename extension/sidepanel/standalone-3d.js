@@ -616,9 +616,6 @@ function updateTickerOrb(ticker, data) {
     if (ring) {
         ring.material.color.setHex(color);
     }
-    
-    // Subtle pulse effect on update (no particles, just scale)
-    orbData.orb.userData.pulseTime = clock.getElapsedTime();
 }
 
 function recalculateOrbScales() {
@@ -887,15 +884,7 @@ function animate() {
             const targetScale = data.targetScale;
             const newScale = currentScale + (targetScale - currentScale) * delta * 2;
             orb.scale.setScalar(newScale);
-            
-            // Pulse effect after mention
-            if (data.pulseTime) {
-                const pulseAge = elapsed - data.pulseTime;
-                if (pulseAge < 0.5) {
-                    const pulseScale = 1 + Math.sin(pulseAge * Math.PI * 4) * 0.2;
-                    orb.scale.multiplyScalar(pulseScale);
-                }
-            }
+            // No pulse effect - just smooth scaling
         }
         
         // Orbit around center
