@@ -57,22 +57,41 @@ const COLORS = {
 // ============== INITIALIZATION ==============
 
 function init() {
+    console.log('[Universe] Initializing...');
+    
     initThree();
+    console.log('[Universe] Three.js initialized');
+    
     initControls();
-    initWebSocket();
+    console.log('[Universe] Controls initialized');
+    
     animate();
+    console.log('[Universe] Animation started');
     
     // UI event listeners
-    document.getElementById('connect-btn').addEventListener('click', handleConnect);
-    document.getElementById('video-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleConnect();
-    });
+    const connectBtn = document.getElementById('connect-btn');
+    const videoInput = document.getElementById('video-input');
+    
+    console.log('[Universe] Connect button found:', !!connectBtn);
+    console.log('[Universe] Video input found:', !!videoInput);
+    
+    if (connectBtn) {
+        connectBtn.addEventListener('click', handleConnect);
+        console.log('[Universe] Click listener added to connect button');
+    }
+    
+    if (videoInput) {
+        videoInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleConnect();
+        });
+    }
     
     // Velocity calculator
     setInterval(calculateVelocity, 500);
     
     // Auto-connect if video ID provided
     if (initialVideoId) {
+        console.log('[Universe] Auto-connecting to:', initialVideoId);
         document.getElementById('video-input').value = initialVideoId;
         setTimeout(handleConnect, 500);
     }
@@ -640,16 +659,23 @@ function animate() {
 
 // ============== WEBSOCKET ==============
 
-function initWebSocket() {
-    // Will connect when user clicks Enter
-}
-
 function connectToStream(videoId) {
+    console.log('[Universe] connectToStream called with:', videoId);
+    console.log('[Universe] Backend URL:', BACKEND_URL);
+    
     if (state.ws) {
         state.ws.close();
     }
     
-    state.ws = new WebSocket(BACKEND_URL);
+    try {
+        state.ws = new WebSocket(BACKEND_URL);
+        console.log('[Universe] WebSocket created');
+    } catch (e) {
+        console.error('[Universe] WebSocket creation error:', e);
+        document.getElementById('connect-btn').disabled = false;
+        document.getElementById('connect-btn').textContent = 'Error - Retry';
+        return;
+    }
     
     state.ws.onopen = () => {
         console.log('[Universe] WebSocket connected');
@@ -671,6 +697,8 @@ function connectToStream(videoId) {
     state.ws.onerror = (e) => {
         console.error('[Universe] WebSocket error:', e);
         setStatus(false);
+        document.getElementById('connect-btn').disabled = false;
+        document.getElementById('connect-btn').textContent = 'Error - Retry';
     };
     
     state.ws.onclose = () => {
@@ -766,11 +794,19 @@ function extractVideoId(input) {
 }
 
 function handleConnect() {
+    console.log('[Universe] handleConnect called');
+    
     const input = document.getElementById('video-input').value || initialVideoId;
+    console.log('[Universe] Input:', input);
+    
     const videoId = extractVideoId(input);
+    console.log('[Universe] Extracted videoId:', videoId);
     
     if (!videoId) {
-        alert('Invalid YouTube URL or video ID');
+        document.getElementById('connect-btn').textContent = 'Invalid URL';
+        setTimeout(() => {
+            document.getElementById('connect-btn').textContent = 'Enter';
+        }, 2000);
         return;
     }
     
