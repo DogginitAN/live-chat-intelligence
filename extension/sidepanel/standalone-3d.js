@@ -285,40 +285,155 @@ function createStarfield() {
 }
 
 function createNebula() {
-    // Create a subtle nebula effect with particles
-    const nebulaGeometry = new THREE.BufferGeometry();
-    const nebulaCount = 200;
-    const positions = new Float32Array(nebulaCount * 3);
-    const colors = new Float32Array(nebulaCount * 3);
+    // Shader-based procedural nebula on a large background sphere
+    const nebulaVertexShader = `
+        varying vec2 vUv;
+        varying vec3 vPosition;
+        void main() {
+            vUv = uv;
+            vPosition = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `;
     
-    for (let i = 0; i < nebulaCount; i++) {
-        const i3 = i * 3;
+    const nebulaFragmentShader = `
+        uniform float time;
+        uniform vec2 resolution;
+        varying vec2 vUv;
+        varying vec3 vPosition;
         
-        // Cluster around origin
-        positions[i3] = (Math.random() - 0.5) * 300;
-        positions[i3 + 1] = (Math.random() - 0.5) * 200;
-        positions[i3 + 2] = (Math.random() - 0.5) * 300;
+        // Simplex noise functions
+        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+        vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
         
-        // Purple/blue tones
-        const hue = 0.6 + Math.random() * 0.2;
-        const color = new THREE.Color().setHSL(hue, 0.8, 0.5);
-        colors[i3] = color.r;
-        colors[i3 + 1] = color.g;
-        colors[i3 + 2] = color.b;
-    }
+        float snoise(vec3 v) {
+            const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+            const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+            
+            vec3 i  = floor(v + dot(v, C.yyy));
+            vec3 x0 = v - i + dot(i, C.xxx);
+            
+            vec3 g = step(x0.yzx, x0.xyz);
+            vec3 l = 1.0 - g;
+            vec3 i1 = min(g.xyz, l.zxy);
+            vec3 i2 = max(g.xyz, l.zxy);
+            
+            vec3 x1 = x0 - i1 + C.xxx;
+            vec3 x2 = x0 - i2 + C.yyy;
+            vec3 x3 = x0 - D.yyy;
+            
+            i = mod289(i);
+            vec4 p = permute(permute(permute(
+                     i.z + vec4(0.0, i1.z, i2.z, 1.0))
+                   + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+                   + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+            
+            float n_ = 0.142857142857;
+            vec3 ns = n_ * D.wyz - D.xzx;
+            
+            vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+            
+            vec4 x_ = floor(j * ns.z);
+            vec4 y_ = floor(j - 7.0 * x_);
+            
+            vec4 x = x_ *ns.x + ns.yyyy;
+            vec4 y = y_ *ns.x + ns.yyyy;
+            vec4 h = 1.0 - abs(x) - abs(y);
+            
+            vec4 b0 = vec4(x.xy, y.xy);
+            vec4 b1 = vec4(x.zw, y.zw);
+            
+            vec4 s0 = floor(b0)*2.0 + 1.0;
+            vec4 s1 = floor(b1)*2.0 + 1.0;
+            vec4 sh = -step(h, vec4(0.0));
+            
+            vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+            vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+            
+            vec3 p0 = vec3(a0.xy, h.x);
+            vec3 p1 = vec3(a0.zw, h.y);
+            vec3 p2 = vec3(a1.xy, h.z);
+            vec3 p3 = vec3(a1.zw, h.w);
+            
+            vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+            p0 *= norm.x;
+            p1 *= norm.y;
+            p2 *= norm.z;
+            p3 *= norm.w;
+            
+            vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+            m = m * m;
+            return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+        }
+        
+        // Fractal Brownian Motion
+        float fbm(vec3 p) {
+            float value = 0.0;
+            float amplitude = 0.5;
+            float frequency = 1.0;
+            for (int i = 0; i < 5; i++) {
+                value += amplitude * snoise(p * frequency);
+                amplitude *= 0.5;
+                frequency *= 2.0;
+            }
+            return value;
+        }
+        
+        void main() {
+            // Use spherical position for seamless wrapping
+            vec3 pos = normalize(vPosition) * 2.0;
+            
+            // Animate slowly
+            float t = time * 0.02;
+            
+            // Multiple noise layers for depth
+            float n1 = fbm(pos + vec3(t * 0.5, t * 0.3, t * 0.2));
+            float n2 = fbm(pos * 2.0 + vec3(-t * 0.3, t * 0.4, -t * 0.1));
+            float n3 = fbm(pos * 0.5 + vec3(t * 0.1, -t * 0.2, t * 0.3));
+            
+            // Combine noise layers
+            float nebulaDensity = (n1 + n2 * 0.5 + n3 * 0.25) * 0.5 + 0.5;
+            nebulaDensity = pow(nebulaDensity, 1.5);  // Increase contrast
+            
+            // Color palette - deep space purples, blues, teals
+            vec3 color1 = vec3(0.1, 0.05, 0.2);   // Deep purple
+            vec3 color2 = vec3(0.05, 0.1, 0.25);  // Deep blue
+            vec3 color3 = vec3(0.0, 0.15, 0.2);   // Teal
+            vec3 color4 = vec3(0.2, 0.05, 0.15);  // Magenta hint
+            
+            // Mix colors based on noise
+            vec3 col = mix(color1, color2, n1 * 0.5 + 0.5);
+            col = mix(col, color3, n2 * 0.3 + 0.3);
+            col = mix(col, color4, n3 * 0.2 + 0.2);
+            
+            // Add some brighter wisps
+            float wisps = pow(max(0.0, n1 * n2), 2.0) * 2.0;
+            col += vec3(0.1, 0.15, 0.3) * wisps;
+            
+            // Fade based on density
+            float alpha = nebulaDensity * 0.4;  // Keep it subtle
+            
+            gl_FragColor = vec4(col, alpha);
+        }
+    `;
     
-    nebulaGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    nebulaGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    
-    const nebulaMaterial = new THREE.PointsMaterial({
-        size: 30,
-        vertexColors: true,
+    const nebulaGeometry = new THREE.SphereGeometry(800, 64, 64);
+    const nebulaMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+            time: { value: 0 },
+            resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+        },
+        vertexShader: nebulaVertexShader,
+        fragmentShader: nebulaFragmentShader,
         transparent: true,
-        opacity: 0.1,
+        side: THREE.BackSide,  // Render on inside of sphere
+        depthWrite: false,
         blending: THREE.AdditiveBlending
     });
     
-    nebula = new THREE.Points(nebulaGeometry, nebulaMaterial);
+    nebula = new THREE.Mesh(nebulaGeometry, nebulaMaterial);
     scene.add(nebula);
 }
 
@@ -330,14 +445,14 @@ function createCentralCore() {
     const coreMaterial = new THREE.MeshBasicMaterial({
         color: 0x6080ff,
         transparent: true,
-        opacity: 0.8
+        opacity: 0.9
     });
     centralCore = new THREE.Mesh(coreGeometry, coreMaterial);
     scene.add(centralCore);
     
     // Multiple glow layers for bloom effect
-    const glowSizes = [8, 12, 18, 25];
-    const glowOpacities = [0.4, 0.25, 0.15, 0.08];
+    const glowSizes = [8, 12, 18, 28, 40];
+    const glowOpacities = [0.5, 0.35, 0.2, 0.12, 0.06];
     
     glowSizes.forEach((size, i) => {
         const glowGeometry = new THREE.SphereGeometry(size, 32, 32);
@@ -346,15 +461,31 @@ function createCentralCore() {
             transparent: true,
             opacity: glowOpacities[i],
             side: THREE.BackSide,
-            blending: THREE.AdditiveBlending
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
         });
         const glow = new THREE.Mesh(glowGeometry, glowMaterial);
         coreGlows.push(glow);
         scene.add(glow);
     });
     
+    // Add large soft glow sprite for extra bloom
+    const coreGlowMaterial = new THREE.SpriteMaterial({
+        map: getGlowTexture(),
+        color: 0x4080ff,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    const coreGlowSprite = new THREE.Sprite(coreGlowMaterial);
+    coreGlowSprite.scale.set(60, 60, 1);
+    coreGlowSprite.userData.isCoreGlow = true;
+    coreGlows.push(coreGlowSprite);
+    scene.add(coreGlowSprite);
+    
     // Add a bright point light at core
-    const coreLight = new THREE.PointLight(0x4060ff, 2, 100);
+    const coreLight = new THREE.PointLight(0x4060ff, 2.5, 150);
     coreLight.position.set(0, 0, 0);
     scene.add(coreLight);
     
@@ -383,6 +514,31 @@ function createCentralCore() {
 // Golden angle for even distribution
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 let orbSpawnIndex = 0;
+
+// Create reusable glow texture for bloom effect
+let glowTexture = null;
+function getGlowTexture() {
+    if (glowTexture) return glowTexture;
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    
+    // Radial gradient - soft glow falloff
+    const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.1, 'rgba(255, 255, 255, 0.8)');
+    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.3)');
+    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.1)');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 256, 256);
+    
+    glowTexture = new THREE.CanvasTexture(canvas);
+    return glowTexture;
+}
 
 function findNonCollidingPosition(baseAngle, baseRadius, baseHeight) {
     const minDistance = 15;  // Minimum distance between orb centers
@@ -468,6 +624,20 @@ function createTickerOrb(ticker, sentiment) {
     const ring = new THREE.Mesh(ringGeometry, ringMaterial);
     ring.rotation.x = Math.PI / 2;
     orb.add(ring);
+    
+    // Add bloom glow sprite (soft halo behind orb)
+    const glowMaterial = new THREE.SpriteMaterial({
+        map: getGlowTexture(),
+        color: color,
+        transparent: true,
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    const glowSprite = new THREE.Sprite(glowMaterial);
+    glowSprite.scale.set(18, 18, 1);  // Larger than orb for bloom effect
+    glowSprite.name = 'glowSprite';
+    orb.add(glowSprite);
     
     // Add ticker text label
     const label = createTextLabel(ticker);
@@ -615,6 +785,12 @@ function updateTickerOrb(ticker, data) {
     const ring = orbData.orb.children.find(c => c.geometry?.type === 'RingGeometry');
     if (ring) {
         ring.material.color.setHex(color);
+    }
+    
+    // Update glow sprite color
+    const glowSprite = orbData.orb.children.find(c => c.name === 'glowSprite');
+    if (glowSprite) {
+        glowSprite.material.color.setHex(color);
     }
 }
 
@@ -850,10 +1026,10 @@ function animate() {
         starfield.rotation.y += delta * 0.01;
     }
     
-    // Pulse nebula
-    if (nebula) {
-        nebula.rotation.y -= delta * 0.005;
-        nebula.material.opacity = 0.08 + Math.sin(elapsed * 0.5) * 0.02;
+    // Animate nebula shader
+    if (nebula && nebula.material.uniforms) {
+        nebula.material.uniforms.time.value = elapsed;
+        nebula.rotation.y -= delta * 0.003;  // Very slow rotation
     }
     
     // Animate ticker orbs
@@ -1002,10 +1178,16 @@ function animate() {
         if (glow.userData.isEnergyRing) {
             glow.rotation.z += delta * glow.userData.rotationSpeed;
             glow.rotation.x += delta * 0.05;
+        } else if (glow.userData.isCoreGlow) {
+            // Pulsing core glow sprite
+            const pulse = 0.6 + Math.sin(elapsed * 1.5) * 0.2;
+            glow.material.opacity = pulse;
+            const scale = 55 + Math.sin(elapsed * 2) * 5;
+            glow.scale.set(scale, scale, 1);
         } else {
-            // Pulsing glow layers
-            const baseopacity = [0.4, 0.25, 0.15, 0.08][i] || 0.1;
-            glow.material.opacity = baseopacity + Math.sin(elapsed * 2 + i * 0.5) * 0.1;
+            // Pulsing glow sphere layers
+            const baseOpacity = [0.5, 0.35, 0.2, 0.12, 0.06][i] || 0.1;
+            glow.material.opacity = baseOpacity + Math.sin(elapsed * 2 + i * 0.5) * 0.1;
         }
     });
     
