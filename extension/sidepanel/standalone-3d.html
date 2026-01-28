@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlowState Universe</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* HUD Overlay */
+        #hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+            z-index: 100;
+        }
+        
+        .hud-left, .hud-right {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .hud-title {
+            font-size: 24px;
+            font-weight: 200;
+            color: rgba(255, 255, 255, 0.9);
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+        
+        .hud-subtitle {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.4);
+            letter-spacing: 2px;
+        }
+        
+        .hud-stat {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.6);
+            text-align: right;
+        }
+        
+        .hud-stat .value {
+            font-size: 28px;
+            font-weight: 200;
+            color: rgba(255, 255, 255, 0.9);
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+        
+        .hud-stat .label {
+            font-size: 10px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            opacity: 0.5;
+        }
+        
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #666;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        
+        .status-dot.connected {
+            background: #22c55e;
+            box-shadow: 0 0 10px #22c55e;
+        }
+        
+        /* Connect overlay */
+        #connect-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            backdrop-filter: blur(20px);
+        }
+        
+        #connect-overlay.hidden {
+            display: none;
+        }
+        
+        #connect-overlay h1 {
+            font-size: 48px;
+            font-weight: 200;
+            color: white;
+            letter-spacing: 8px;
+            margin-bottom: 8px;
+        }
+        
+        #connect-overlay p {
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 40px;
+            letter-spacing: 2px;
+        }
+        
+        .connect-form {
+            display: flex;
+            gap: 12px;
+        }
+        
+        #video-input {
+            width: 320px;
+            padding: 14px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+        }
+        
+        #video-input:focus {
+            border-color: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        #video-input::placeholder {
+            color: rgba(255, 255, 255, 0.3);
+        }
+        
+        #connect-btn {
+            padding: 14px 28px;
+            background: white;
+            color: black;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        #connect-btn:hover {
+            transform: scale(1.05);
+        }
+        
+        #connect-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        /* Ticker legend at bottom */
+        #ticker-legend {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            padding: 12px 24px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 30px;
+            backdrop-filter: blur(10px);
+            z-index: 100;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .legend-orb {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .legend-orb.bullish {
+            background: radial-gradient(circle at 30% 30%, #4ade80, #166534);
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+        }
+        
+        .legend-orb.bearish {
+            background: radial-gradient(circle at 30% 30%, #f87171, #991b1b);
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+        
+        .legend-orb.neutral {
+            background: radial-gradient(circle at 30% 30%, #94a3b8, #475569);
+            box-shadow: 0 0 10px rgba(148, 163, 184, 0.5);
+        }
+        
+        /* Instructions hint */
+        #instructions {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.3);
+            letter-spacing: 1px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <!-- HUD -->
+    <div id="hud">
+        <div class="hud-left">
+            <div class="hud-title">FlowState</div>
+            <div class="hud-subtitle">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="status-text">Disconnected</span>
+            </div>
+        </div>
+        <div class="hud-right">
+            <div class="hud-stat">
+                <div class="value" id="velocity-value">0.0</div>
+                <div class="label">msg/sec</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Connect Overlay -->
+    <div id="connect-overlay">
+        <h1>FLOWSTATE</h1>
+        <p>Enter the stream</p>
+        <div class="connect-form">
+            <input type="text" id="video-input" placeholder="YouTube live URL or video ID">
+            <button id="connect-btn">Enter</button>
+        </div>
+    </div>
+    
+    <!-- Legend -->
+    <div id="ticker-legend" style="display: none;">
+        <div class="legend-item">
+            <div class="legend-orb bullish"></div>
+            <span>Bullish</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-orb bearish"></div>
+            <span>Bearish</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-orb neutral"></div>
+            <span>Neutral</span>
+        </div>
+    </div>
+    
+    <div id="instructions">Drag to orbit • Scroll to zoom • Double-click to reset</div>
+    
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="standalone-3d.js"></script>
+</body>
+</html>

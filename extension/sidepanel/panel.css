@@ -97,6 +97,27 @@ body {
     color: var(--blue);
 }
 
+/* Header Buttons (Universe, etc) */
+.header-btn {
+    width: 32px;
+    height: 32px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.header-btn:hover {
+    background: var(--purple-dim);
+    border-color: var(--purple);
+}
+
 /* Connection Status */
 .status {
     display: flex;

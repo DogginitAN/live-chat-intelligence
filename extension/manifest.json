@@ -52,7 +52,13 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["sidepanel/standalone.html", "sidepanel/standalone.js", "sidepanel/panel.css"],
+      "resources": [
+        "sidepanel/standalone.html",
+        "sidepanel/standalone.js",
+        "sidepanel/standalone-3d.html",
+        "sidepanel/standalone-3d.js",
+        "sidepanel/panel.css"
+      ],
       "matches": ["<all_urls>"]
     }
   ]

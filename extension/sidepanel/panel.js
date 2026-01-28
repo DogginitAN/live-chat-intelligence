@@ -140,6 +140,9 @@ async function init() {
     // Set up pop out button
     elements.popoutBtn.addEventListener('click', handlePopOut);
     
+    // Set up universe (3D) button
+    document.getElementById('universe-btn').addEventListener('click', handleUniverse);
+    
     // Start velocity calculator
     setInterval(calculateVelocity, 500);
     
@@ -1228,6 +1231,28 @@ function handlePopOut() {
         top: 100
     }, (newWindow) => {
         console.log('[Panel] Pop out window created:', newWindow?.id);
+    });
+}
+
+function handleUniverse() {
+    console.log('[Panel] Universe (3D) clicked, videoId:', state.videoId);
+    
+    // Build URL with video ID
+    const universeUrl = chrome.runtime.getURL('sidepanel/standalone-3d.html');
+    const fullUrl = state.videoId 
+        ? `${universeUrl}?v=${state.videoId}` 
+        : universeUrl;
+    
+    // Open in larger window for 3D experience
+    chrome.windows.create({
+        url: fullUrl,
+        type: 'popup',
+        width: 1200,
+        height: 800,
+        left: 50,
+        top: 50
+    }, (newWindow) => {
+        console.log('[Panel] Universe window created:', newWindow?.id);
     });
 }
 
