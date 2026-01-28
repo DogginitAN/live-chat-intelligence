@@ -912,9 +912,20 @@ function animate() {
 
 // ============== WEBSOCKET ==============
 
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const BASE_RECONNECT_DELAY = 2000;
+let pingInterval = null;
+
 function connectToStream(videoId) {
     console.log('[Universe] connectToStream called with:', videoId);
     console.log('[Universe] Backend URL:', BACKEND_URL);
+    
+    // Clear any existing ping interval
+    if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+    }
     
     if (state.ws) {
         state.ws.close();
@@ -925,17 +936,25 @@ function connectToStream(videoId) {
         console.log('[Universe] WebSocket created');
     } catch (e) {
         console.error('[Universe] WebSocket creation error:', e);
-        document.getElementById('connect-btn').disabled = false;
-        document.getElementById('connect-btn').textContent = 'Error - Retry';
+        scheduleReconnect(videoId);
         return;
     }
     
     state.ws.onopen = () => {
         console.log('[Universe] WebSocket connected');
+        reconnectAttempts = 0;  // Reset on successful connection
         state.ws.send(JSON.stringify({
             type: 'SUBSCRIBE',
             videoId: videoId
         }));
+        
+        // Start keepalive ping every 30 seconds
+        pingInterval = setInterval(() => {
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({ type: 'ping' }));
+                console.log('[Universe] Sent keepalive ping');
+            }
+        }, 30000);
     };
     
     state.ws.onmessage = (event) => {
@@ -949,16 +968,50 @@ function connectToStream(videoId) {
     
     state.ws.onerror = (e) => {
         console.error('[Universe] WebSocket error:', e);
-        setStatus(false);
-        document.getElementById('connect-btn').disabled = false;
-        document.getElementById('connect-btn').textContent = 'Error - Retry';
     };
     
-    state.ws.onclose = () => {
-        console.log('[Universe] WebSocket closed');
+    state.ws.onclose = (e) => {
+        console.log('[Universe] WebSocket closed, code:', e.code, 'reason:', e.reason);
         state.connected = false;
         setStatus(false);
+        
+        // Clear ping interval
+        if (pingInterval) {
+            clearInterval(pingInterval);
+            pingInterval = null;
+        }
+        
+        // Auto-reconnect if we had a video ID
+        if (state.videoId) {
+            scheduleReconnect(state.videoId);
+        }
     };
+}
+
+function scheduleReconnect(videoId) {
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        console.log('[Universe] Max reconnect attempts reached');
+        document.getElementById('connect-btn').disabled = false;
+        document.getElementById('connect-btn').textContent = 'Reconnect';
+        return;
+    }
+    
+    reconnectAttempts++;
+    const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(1.5, reconnectAttempts - 1), 30000);
+    
+    console.log(`[Universe] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+    
+    // Update status to show reconnecting
+    const text = document.getElementById('status-text');
+    if (text) {
+        text.textContent = `Reconnecting... (${reconnectAttempts})`;
+    }
+    
+    setTimeout(() => {
+        if (state.videoId) {
+            connectToStream(videoId);
+        }
+    }, delay);
 }
 
 function handleMessage(msg) {
