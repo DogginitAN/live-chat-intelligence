@@ -194,15 +194,16 @@ function onResize() {
 
 function createStarfield() {
     const starsGeometry = new THREE.BufferGeometry();
-    const starCount = 5000;
+    const starCount = 8000;  // More stars
     const positions = new Float32Array(starCount * 3);
     const colors = new Float32Array(starCount * 3);
+    const sizes = new Float32Array(starCount);
     
     for (let i = 0; i < starCount; i++) {
         const i3 = i * 3;
         
         // Distribute in a sphere
-        const radius = 500 + Math.random() * 500;
+        const radius = 400 + Math.random() * 600;
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
         
@@ -210,25 +211,77 @@ function createStarfield() {
         positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
         positions[i3 + 2] = radius * Math.cos(phi);
         
-        // Vary star colors slightly
-        const brightness = 0.5 + Math.random() * 0.5;
-        colors[i3] = brightness;
-        colors[i3 + 1] = brightness;
-        colors[i3 + 2] = brightness + Math.random() * 0.2;
+        // Vary star colors - add some blue/yellow tints
+        const colorRand = Math.random();
+        let r, g, b;
+        if (colorRand < 0.1) {
+            // Blue-white stars (bright)
+            r = 0.8; g = 0.9; b = 1.0;
+        } else if (colorRand < 0.15) {
+            // Yellow/orange stars
+            r = 1.0; g = 0.9; b = 0.7;
+        } else {
+            // Regular white stars
+            const brightness = 0.6 + Math.random() * 0.4;
+            r = brightness; g = brightness; b = brightness + Math.random() * 0.1;
+        }
+        colors[i3] = r;
+        colors[i3 + 1] = g;
+        colors[i3 + 2] = b;
+        
+        // Vary sizes - some prominent bright stars
+        sizes[i] = Math.random() < 0.02 ? 4 + Math.random() * 3 : 1.5 + Math.random() * 1.5;
     }
     
     starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     starsGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     
     const starsMaterial = new THREE.PointsMaterial({
-        size: 1.5,
+        size: 2.5,  // Larger base size
         vertexColors: true,
         transparent: true,
-        opacity: 0.8
+        opacity: 1.0,  // Full opacity
+        sizeAttenuation: true
     });
     
     starfield = new THREE.Points(starsGeometry, starsMaterial);
     scene.add(starfield);
+    
+    // Add a second layer of bright prominent stars
+    const brightStarsGeometry = new THREE.BufferGeometry();
+    const brightCount = 100;
+    const brightPositions = new Float32Array(brightCount * 3);
+    const brightColors = new Float32Array(brightCount * 3);
+    
+    for (let i = 0; i < brightCount; i++) {
+        const i3 = i * 3;
+        const radius = 450 + Math.random() * 500;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        
+        brightPositions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+        brightPositions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+        brightPositions[i3 + 2] = radius * Math.cos(phi);
+        
+        // Bright white/blue
+        brightColors[i3] = 0.9 + Math.random() * 0.1;
+        brightColors[i3 + 1] = 0.95 + Math.random() * 0.05;
+        brightColors[i3 + 2] = 1.0;
+    }
+    
+    brightStarsGeometry.setAttribute('position', new THREE.BufferAttribute(brightPositions, 3));
+    brightStarsGeometry.setAttribute('color', new THREE.BufferAttribute(brightColors, 3));
+    
+    const brightStarsMaterial = new THREE.PointsMaterial({
+        size: 5,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending
+    });
+    
+    const brightStars = new THREE.Points(brightStarsGeometry, brightStarsMaterial);
+    scene.add(brightStars);
 }
 
 function createNebula() {
@@ -269,30 +322,109 @@ function createNebula() {
     scene.add(nebula);
 }
 
+let centralCore, coreGlows = [];
+
 function createCentralCore() {
     // Glowing central core where tickers orbit
     const coreGeometry = new THREE.SphereGeometry(5, 32, 32);
     const coreMaterial = new THREE.MeshBasicMaterial({
-        color: 0x4060ff,
+        color: 0x6080ff,
         transparent: true,
-        opacity: 0.3
+        opacity: 0.8
     });
-    const core = new THREE.Mesh(coreGeometry, coreMaterial);
-    scene.add(core);
+    centralCore = new THREE.Mesh(coreGeometry, coreMaterial);
+    scene.add(centralCore);
     
-    // Core glow
-    const glowGeometry = new THREE.SphereGeometry(8, 32, 32);
-    const glowMaterial = new THREE.MeshBasicMaterial({
-        color: 0x4060ff,
-        transparent: true,
-        opacity: 0.1,
-        side: THREE.BackSide
+    // Multiple glow layers for bloom effect
+    const glowSizes = [8, 12, 18, 25];
+    const glowOpacities = [0.4, 0.25, 0.15, 0.08];
+    
+    glowSizes.forEach((size, i) => {
+        const glowGeometry = new THREE.SphereGeometry(size, 32, 32);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+            color: 0x4060ff,
+            transparent: true,
+            opacity: glowOpacities[i],
+            side: THREE.BackSide,
+            blending: THREE.AdditiveBlending
+        });
+        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+        coreGlows.push(glow);
+        scene.add(glow);
     });
-    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-    scene.add(glow);
+    
+    // Add a bright point light at core
+    const coreLight = new THREE.PointLight(0x4060ff, 2, 100);
+    coreLight.position.set(0, 0, 0);
+    scene.add(coreLight);
+    
+    // Add rotating energy rings
+    for (let i = 0; i < 3; i++) {
+        const ringGeometry = new THREE.RingGeometry(10 + i * 4, 11 + i * 4, 64);
+        const ringMaterial = new THREE.MeshBasicMaterial({
+            color: 0x4080ff,
+            transparent: true,
+            opacity: 0.3 - i * 0.08,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending
+        });
+        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+        ring.rotation.x = Math.PI / 2 + (i * 0.3);
+        ring.rotation.y = i * 0.5;
+        ring.userData.rotationSpeed = 0.2 + i * 0.1;
+        ring.userData.isEnergyRing = true;
+        coreGlows.push(ring);
+        scene.add(ring);
+    }
 }
 
 // ============== TICKER ORBS ==============
+
+// Golden angle for even distribution
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+let orbSpawnIndex = 0;
+
+function findNonCollidingPosition(baseAngle, baseRadius, baseHeight) {
+    const minDistance = 15;  // Minimum distance between orb centers
+    let attempts = 0;
+    let angle = baseAngle;
+    let radius = baseRadius;
+    let height = baseHeight;
+    
+    while (attempts < 20) {
+        const testPos = new THREE.Vector3(
+            Math.cos(angle) * radius,
+            height,
+            Math.sin(angle) * radius
+        );
+        
+        let collision = false;
+        for (const existingOrb of tickerOrbs.children) {
+            const dist = testPos.distanceTo(existingOrb.position);
+            if (dist < minDistance) {
+                collision = true;
+                break;
+            }
+        }
+        
+        if (!collision) {
+            return { angle, radius, height };
+        }
+        
+        // Try different position
+        attempts++;
+        angle += GOLDEN_ANGLE * 0.3;
+        radius = 30 + ((radius - 30 + 10) % 50);  // Cycle through radii
+        height = (Math.random() - 0.5) * 40;
+    }
+    
+    // Fallback: just offset from base
+    return { 
+        angle: baseAngle + Math.random() * 0.5, 
+        radius: baseRadius + Math.random() * 20, 
+        height: baseHeight + (Math.random() - 0.5) * 20 
+    };
+}
 
 function createTickerOrb(ticker, sentiment) {
     const color = COLORS[sentiment] || COLORS.neutral;
@@ -310,10 +442,14 @@ function createTickerOrb(ticker, sentiment) {
     
     const orb = new THREE.Mesh(geometry, material);
     
-    // Position in orbit around center
-    const angle = Math.random() * Math.PI * 2;
-    const radius = 30 + Math.random() * 40;
-    const height = (Math.random() - 0.5) * 30;
+    // Use golden angle for even distribution
+    orbSpawnIndex++;
+    const baseAngle = orbSpawnIndex * GOLDEN_ANGLE;
+    const baseRadius = 35 + (orbSpawnIndex % 5) * 8;  // Stagger radii
+    const baseHeight = ((orbSpawnIndex % 7) - 3) * 6;  // Stagger heights
+    
+    // Find non-colliding position
+    const { angle, radius, height } = findNonCollidingPosition(baseAngle, baseRadius, baseHeight);
     
     orb.position.set(
         Math.cos(angle) * radius,
@@ -422,25 +558,32 @@ function createFlyingMessage(text, sentiment, isQuestion, hasTicker) {
                   hasTicker ? COLORS[sentiment] || COLORS.message :
                   COLORS.message;
     
-    // Create sprite
+    // Create sprite with LARGER text
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 512;
-    canvas.height = 48;
+    canvas.width = 1024;  // Bigger canvas
+    canvas.height = 128;
     
     // Truncate text
-    const maxLen = 50;
+    const maxLen = 60;
     const displayText = text.length > maxLen ? text.slice(0, maxLen) + '...' : text;
     
-    ctx.font = '20px -apple-system, sans-serif';
+    // Background pill for readability
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    const textWidth = ctx.measureText(displayText).width || 600;
+    ctx.beginPath();
+    ctx.roundRect(5, 20, Math.min(textWidth + 40, 1000), 88, 20);
+    ctx.fill();
+    
+    ctx.font = 'bold 42px -apple-system, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     
     // Glow effect
     ctx.shadowColor = `#${color.toString(16).padStart(6, '0')}`;
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 15;
     ctx.fillStyle = 'white';
-    ctx.fillText(displayText, 10, 24);
+    ctx.fillText(displayText, 25, 64);
     
     const texture = new THREE.CanvasTexture(canvas);
     const material = new THREE.SpriteMaterial({
@@ -450,7 +593,7 @@ function createFlyingMessage(text, sentiment, isQuestion, hasTicker) {
     });
     
     const sprite = new THREE.Sprite(material);
-    sprite.scale.set(25, 2.5, 1);
+    sprite.scale.set(60, 7.5, 1);  // Much larger scale
     
     // Start from random position far away
     const startAngle = Math.random() * Math.PI * 2;
@@ -476,9 +619,9 @@ function createFlyingMessage(text, sentiment, isQuestion, hasTicker) {
     
     sprite.userData = {
         direction: direction,
-        speed: 0.5 + Math.random() * 0.3,
+        speed: 0.3 + Math.random() * 0.2,  // Slower movement
         life: 0,
-        maxLife: 200 + Math.random() * 100
+        maxLife: 500 + Math.random() * 200  // ~8-12 seconds at 60fps
     };
     
     messageTrails.add(sprite);
@@ -494,13 +637,10 @@ function createFlyingMessage(text, sentiment, isQuestion, hasTicker) {
 
 // ============== VIBE EXPLOSIONS ==============
 
-function createVibeExplosion(vibeType) {
+function createVibeExplosion(vibeType, messageText) {
     const color = vibeType === 'funny' ? COLORS.funny : COLORS.uplifting;
-    
-    const particleCount = 100;
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(particleCount * 3);
-    const velocities = [];
+    const emoji = vibeType === 'funny' ? '😂' : '💖';
+    const label = vibeType === 'funny' ? 'FUNNY' : 'UPLIFTING';
     
     // Random position in view
     const origin = new THREE.Vector3(
@@ -509,16 +649,79 @@ function createVibeExplosion(vibeType) {
         (Math.random() - 0.5) * 80
     );
     
+    // Create floating label that shows what triggered it
+    const labelCanvas = document.createElement('canvas');
+    const labelCtx = labelCanvas.getContext('2d');
+    labelCanvas.width = 512;
+    labelCanvas.height = 256;
+    
+    // Background
+    labelCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    labelCtx.beginPath();
+    labelCtx.roundRect(10, 10, 492, 236, 20);
+    labelCtx.fill();
+    
+    // Border glow
+    labelCtx.strokeStyle = `#${color.toString(16).padStart(6, '0')}`;
+    labelCtx.lineWidth = 4;
+    labelCtx.shadowColor = `#${color.toString(16).padStart(6, '0')}`;
+    labelCtx.shadowBlur = 20;
+    labelCtx.stroke();
+    
+    // Emoji and label
+    labelCtx.font = 'bold 48px -apple-system, sans-serif';
+    labelCtx.textAlign = 'center';
+    labelCtx.fillStyle = 'white';
+    labelCtx.fillText(`${emoji} ${label}`, 256, 70);
+    
+    // Message preview (truncated)
+    labelCtx.font = '28px -apple-system, sans-serif';
+    labelCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    const preview = messageText && messageText.length > 40 
+        ? messageText.slice(0, 40) + '...' 
+        : (messageText || '');
+    labelCtx.fillText(preview, 256, 140);
+    
+    const labelTexture = new THREE.CanvasTexture(labelCanvas);
+    const labelMaterial = new THREE.SpriteMaterial({
+        map: labelTexture,
+        transparent: true,
+        opacity: 1
+    });
+    
+    const labelSprite = new THREE.Sprite(labelMaterial);
+    labelSprite.scale.set(40, 20, 1);
+    labelSprite.position.copy(origin);
+    labelSprite.position.y += 15;  // Float above explosion
+    
+    labelSprite.userData = {
+        life: 0,
+        maxLife: 180  // 3 seconds at 60fps
+    };
+    
+    scene.add(labelSprite);
+    state.vibeParticles.push(labelSprite);
+    
+    // Create particle burst
+    const particleCount = 150;  // More particles
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = [];
+    
     for (let i = 0; i < particleCount; i++) {
         positions[i * 3] = origin.x;
         positions[i * 3 + 1] = origin.y;
         positions[i * 3 + 2] = origin.z;
         
-        // Random outward velocity
+        // Spherical burst
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const speed = 1 + Math.random() * 2;
+        
         velocities.push(new THREE.Vector3(
-            (Math.random() - 0.5) * 2,
-            (Math.random() - 0.5) * 2,
-            (Math.random() - 0.5) * 2
+            Math.sin(phi) * Math.cos(theta) * speed,
+            Math.sin(phi) * Math.sin(theta) * speed,
+            Math.cos(phi) * speed
         ));
     }
     
@@ -526,7 +729,7 @@ function createVibeExplosion(vibeType) {
     
     const material = new THREE.PointsMaterial({
         color: color,
-        size: 3,
+        size: 5,  // Bigger particles
         transparent: true,
         opacity: 1,
         blending: THREE.AdditiveBlending
@@ -536,7 +739,8 @@ function createVibeExplosion(vibeType) {
     particles.userData = {
         velocities: velocities,
         life: 0,
-        maxLife: 120
+        maxLife: 120,
+        isParticles: true
     };
     
     scene.add(particles);
@@ -591,6 +795,18 @@ function animate() {
         
         // Rotate
         orb.rotation.y += delta * 0.5;
+        
+        // Scale label based on camera distance (LOD)
+        const label = orb.children.find(c => c.isSprite);
+        if (label) {
+            const distToCamera = orb.position.distanceTo(camera.position);
+            // Fade out labels when far away to reduce clutter
+            const labelOpacity = Math.max(0, Math.min(1, 1 - (distToCamera - 80) / 150));
+            label.material.opacity = labelOpacity;
+            // Scale labels larger when far to stay readable
+            const labelScale = Math.max(8, Math.min(15, distToCamera / 10));
+            label.scale.set(labelScale, labelScale / 4, 1);
+        }
     });
     
     // Animate flying messages
@@ -619,40 +835,77 @@ function animate() {
         }
     });
     
-    // Animate vibe particles
-    state.vibeParticles.forEach((particles, index) => {
-        const data = particles.userData;
+    // Animate vibe particles and labels
+    state.vibeParticles.forEach((obj, index) => {
+        const data = obj.userData;
         data.life++;
         
-        // Update positions
-        const positions = particles.geometry.attributes.position.array;
-        for (let i = 0; i < data.velocities.length; i++) {
-            positions[i * 3] += data.velocities[i].x;
-            positions[i * 3 + 1] += data.velocities[i].y;
-            positions[i * 3 + 2] += data.velocities[i].z;
+        if (data.isParticles) {
+            // Particle system animation
+            const positions = obj.geometry.attributes.position.array;
+            for (let i = 0; i < data.velocities.length; i++) {
+                positions[i * 3] += data.velocities[i].x;
+                positions[i * 3 + 1] += data.velocities[i].y;
+                positions[i * 3 + 2] += data.velocities[i].z;
+                
+                // Slow down
+                data.velocities[i].multiplyScalar(0.97);
+            }
+            obj.geometry.attributes.position.needsUpdate = true;
             
-            // Slow down
-            data.velocities[i].multiplyScalar(0.98);
-        }
-        particles.geometry.attributes.position.needsUpdate = true;
-        
-        // Fade out
-        particles.material.opacity = 1 - (data.life / data.maxLife);
-        
-        // Remove when done
-        if (data.life >= data.maxLife) {
-            scene.remove(particles);
-            particles.geometry.dispose();
-            particles.material.dispose();
-            state.vibeParticles.splice(index, 1);
+            // Fade out
+            obj.material.opacity = 1 - (data.life / data.maxLife);
+            
+            // Remove when done
+            if (data.life >= data.maxLife) {
+                scene.remove(obj);
+                obj.geometry.dispose();
+                obj.material.dispose();
+                state.vibeParticles.splice(index, 1);
+            }
+        } else {
+            // Label sprite animation - float up and fade
+            obj.position.y += 0.1;
+            
+            // Fade out in last third of life
+            if (data.life > data.maxLife * 0.6) {
+                const fadeProgress = (data.life - data.maxLife * 0.6) / (data.maxLife * 0.4);
+                obj.material.opacity = 1 - fadeProgress;
+            }
+            
+            // Remove when done
+            if (data.life >= data.maxLife) {
+                scene.remove(obj);
+                obj.material.dispose();
+                state.vibeParticles.splice(index, 1);
+            }
         }
     });
     
     // Auto-rotate camera slowly when not dragging
     if (!isDragging && state.connected) {
-        cameraTheta += delta * 0.02;
+        cameraTheta += delta * 0.008;  // Slower rotation
         updateCameraPosition();
     }
+    
+    // Animate central core pulsing
+    if (centralCore) {
+        const pulse = 0.8 + Math.sin(elapsed * 2) * 0.2;
+        centralCore.material.opacity = pulse;
+        centralCore.scale.setScalar(1 + Math.sin(elapsed * 1.5) * 0.05);
+    }
+    
+    // Animate core glow layers and energy rings
+    coreGlows.forEach((glow, i) => {
+        if (glow.userData.isEnergyRing) {
+            glow.rotation.z += delta * glow.userData.rotationSpeed;
+            glow.rotation.x += delta * 0.05;
+        } else {
+            // Pulsing glow layers
+            const baseopacity = [0.4, 0.25, 0.15, 0.08][i] || 0.1;
+            glow.material.opacity = baseopacity + Math.sin(elapsed * 2 + i * 0.5) * 0.1;
+        }
+    });
     
     renderer.render(scene, camera);
 }
@@ -767,7 +1020,7 @@ function processMessage(msg) {
 
 function processVibe(msg) {
     if (msg.vibe) {
-        createVibeExplosion(msg.vibe);
+        createVibeExplosion(msg.vibe, msg.text || msg.message || '');
     }
 }
 
