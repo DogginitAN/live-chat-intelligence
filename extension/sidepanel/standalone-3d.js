@@ -474,6 +474,9 @@ function createTickerOrb(ticker, sentiment) {
     label.position.y = 5;
     orb.add(label);
     
+    // START TINY - birth animation
+    orb.scale.setScalar(0.01);
+    
     // Store metadata
     orb.userData = {
         ticker: ticker,
@@ -482,11 +485,84 @@ function createTickerOrb(ticker, sentiment) {
         orbitSpeed: 0.001 + Math.random() * 0.002,
         baseY: height,
         bobOffset: Math.random() * Math.PI * 2,
-        targetScale: 1
+        targetScale: 1,
+        // Birth animation state
+        isBirthing: true,
+        birthProgress: 0,
+        birthDuration: 60  // ~1 second at 60fps
     };
+    
+    // Create birth particle effect
+    createBirthEffect(orb.position, color);
     
     tickerOrbs.add(orb);
     return orb;
+}
+
+function createBirthEffect(position, color) {
+    // Expanding ring effect
+    const ringGeometry = new THREE.RingGeometry(0.5, 1, 32);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending
+    });
+    const birthRing = new THREE.Mesh(ringGeometry, ringMaterial);
+    birthRing.position.copy(position);
+    birthRing.rotation.x = Math.PI / 2;
+    birthRing.userData = {
+        isBirthRing: true,
+        life: 0,
+        maxLife: 45  // ~0.75 seconds
+    };
+    scene.add(birthRing);
+    state.vibeParticles.push(birthRing);  // Reuse vibe particles array for cleanup
+    
+    // Sparkle particles
+    const particleCount = 30;
+    const particleGeometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const velocities = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+        positions[i * 3] = position.x;
+        positions[i * 3 + 1] = position.y;
+        positions[i * 3 + 2] = position.z;
+        
+        // Outward burst
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const speed = 0.3 + Math.random() * 0.5;
+        
+        velocities.push(new THREE.Vector3(
+            Math.sin(phi) * Math.cos(theta) * speed,
+            Math.sin(phi) * Math.sin(theta) * speed,
+            Math.cos(phi) * speed
+        ));
+    }
+    
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    
+    const particleMaterial = new THREE.PointsMaterial({
+        color: color,
+        size: 2,
+        transparent: true,
+        opacity: 1,
+        blending: THREE.AdditiveBlending
+    });
+    
+    const particles = new THREE.Points(particleGeometry, particleMaterial);
+    particles.userData = {
+        velocities: velocities,
+        life: 0,
+        maxLife: 40,
+        isParticles: true
+    };
+    
+    scene.add(particles);
+    state.vibeParticles.push(particles);
 }
 
 function createTextLabel(text) {
@@ -515,6 +591,10 @@ function createTextLabel(text) {
     return sprite;
 }
 
+// Sizing constants (matching 2D bubble physics)
+const ORB_MIN_SCALE = 0.6;   // Minimum orb size
+const ORB_MAX_SCALE = 2.5;   // Maximum orb size (for top ticker)
+
 function updateTickerOrb(ticker, data) {
     let orbData = state.tickers[ticker];
     
@@ -530,9 +610,8 @@ function updateTickerOrb(ticker, data) {
     orbData.count = data.count;
     orbData.sentiment = data.sentiment;
     
-    // Scale grows logarithmically with mentions
-    const scale = 1 + Math.log10(data.count + 1) * 0.8;
-    orbData.orb.userData.targetScale = scale;
+    // Recalculate ALL orb scales relative to max (like 2D bubbles)
+    recalculateOrbScales();
     
     // Update color based on sentiment
     const sentiment = getSentiment(data.sentiment);
@@ -540,8 +619,30 @@ function updateTickerOrb(ticker, data) {
     orbData.orb.material.color.setHex(color);
     orbData.orb.material.emissive.setHex(color);
     
+    // Also update ring color
+    const ring = orbData.orb.children.find(c => c.geometry?.type === 'RingGeometry');
+    if (ring) {
+        ring.material.color.setHex(color);
+    }
+    
     // Pulse effect on update
     orbData.orb.userData.pulseTime = clock.getElapsedTime();
+}
+
+function recalculateOrbScales() {
+    // Find max count across all tickers
+    let maxCount = 1;
+    Object.values(state.tickers).forEach(t => {
+        if (t.count > maxCount) maxCount = t.count;
+    });
+    
+    // Update each orb's target scale relative to max
+    Object.values(state.tickers).forEach(t => {
+        const ratio = t.count / maxCount;  // 0 to 1
+        // Use sqrt for more gradual scaling (like bubble physics)
+        const scale = ORB_MIN_SCALE + Math.sqrt(ratio) * (ORB_MAX_SCALE - ORB_MIN_SCALE);
+        t.orb.userData.targetScale = scale;
+    });
 }
 
 function getSentiment(sentimentData) {
@@ -770,6 +871,41 @@ function animate() {
     tickerOrbs.children.forEach(orb => {
         const data = orb.userData;
         
+        // Birth animation - grow from tiny to full size
+        if (data.isBirthing) {
+            data.birthProgress++;
+            const t = data.birthProgress / data.birthDuration;
+            
+            if (t >= 1) {
+                // Birth complete
+                data.isBirthing = false;
+            } else {
+                // Elastic ease-out for satisfying "pop" into existence
+                const easeOut = 1 - Math.pow(1 - t, 3);  // Cubic ease out
+                const overshoot = 1 + Math.sin(t * Math.PI) * 0.2;  // Slight overshoot
+                const birthScale = easeOut * overshoot * data.targetScale;
+                orb.scale.setScalar(Math.max(0.01, birthScale));
+                
+                // Skip normal scale logic during birth
+                // But still do orbit/bob/rotate
+            }
+        } else {
+            // Normal smooth scale transition (after birth)
+            const currentScale = orb.scale.x;
+            const targetScale = data.targetScale;
+            const newScale = currentScale + (targetScale - currentScale) * delta * 2;
+            orb.scale.setScalar(newScale);
+            
+            // Pulse effect after mention
+            if (data.pulseTime) {
+                const pulseAge = elapsed - data.pulseTime;
+                if (pulseAge < 0.5) {
+                    const pulseScale = 1 + Math.sin(pulseAge * Math.PI * 4) * 0.2;
+                    orb.scale.multiplyScalar(pulseScale);
+                }
+            }
+        }
+        
         // Orbit around center
         data.orbitAngle += data.orbitSpeed;
         orb.position.x = Math.cos(data.orbitAngle) * data.orbitRadius;
@@ -777,21 +913,6 @@ function animate() {
         
         // Gentle bobbing
         orb.position.y = data.baseY + Math.sin(elapsed + data.bobOffset) * 2;
-        
-        // Smooth scale transition
-        const currentScale = orb.scale.x;
-        const targetScale = data.targetScale;
-        const newScale = currentScale + (targetScale - currentScale) * delta * 2;
-        orb.scale.setScalar(newScale);
-        
-        // Pulse effect after mention
-        if (data.pulseTime) {
-            const pulseAge = elapsed - data.pulseTime;
-            if (pulseAge < 0.5) {
-                const pulseScale = 1 + Math.sin(pulseAge * Math.PI * 4) * 0.2;
-                orb.scale.multiplyScalar(pulseScale);
-            }
-        }
         
         // Rotate
         orb.rotation.y += delta * 0.5;
@@ -835,12 +956,26 @@ function animate() {
         }
     });
     
-    // Animate vibe particles and labels
+    // Animate vibe particles, labels, and birth effects
     state.vibeParticles.forEach((obj, index) => {
         const data = obj.userData;
         data.life++;
         
-        if (data.isParticles) {
+        if (data.isBirthRing) {
+            // Expanding birth ring animation
+            const t = data.life / data.maxLife;
+            const scale = 1 + t * 15;  // Expand outward
+            obj.scale.setScalar(scale);
+            obj.material.opacity = 0.8 * (1 - t);  // Fade out as it expands
+            
+            // Remove when done
+            if (data.life >= data.maxLife) {
+                scene.remove(obj);
+                obj.geometry.dispose();
+                obj.material.dispose();
+                state.vibeParticles.splice(index, 1);
+            }
+        } else if (data.isParticles) {
             // Particle system animation
             const positions = obj.geometry.attributes.position.array;
             for (let i = 0; i < data.velocities.length; i++) {
