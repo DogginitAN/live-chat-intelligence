@@ -126,6 +126,30 @@ body {
     animation: pulse 1s infinite;
 }
 
+/* Degraded Mode Indicator (Rate Limited) */
+.degraded-indicator {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--yellow);
+    background: var(--yellow-dim);
+    padding: 4px 10px;
+    border-radius: 12px;
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.degraded-indicator.visible {
+    display: flex;
+    opacity: 1;
+}
+
+.degraded-indicator .degraded-icon {
+    font-size: 12px;
+}
+
 /* Velocity Display */
 #velocity-display {
     display: flex;

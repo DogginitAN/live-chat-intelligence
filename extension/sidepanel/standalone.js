@@ -425,6 +425,10 @@ function handleMessage(msg) {
     switch (msg.type) {
         case 'connected':
             console.log('[Standalone] Backend connected');
+            // Check if LLM is available on connect
+            if (msg.llm_available === false) {
+                handleRateLimitStatus({ llm_available: false, status: msg.rate_limit_status });
+            }
             break;
             
         case 'subscribed':
@@ -460,10 +464,50 @@ function handleMessage(msg) {
             processPulse(msg.data);
             break;
             
+        case 'rate_limit_status':
+            handleRateLimitStatus(msg);
+            break;
+            
         case 'error':
             console.error('[Standalone] Backend error:', msg.message);
             showError(msg.message);
             break;
+    }
+}
+
+function handleRateLimitStatus(data) {
+    console.log('[Standalone] Rate limit status:', data);
+    
+    if (!data.llm_available) {
+        const cooldown = data.status?.cooldown_remaining || 60;
+        showDegradedIndicator(`AI features paused (${cooldown}s)`);
+    } else {
+        hideDegradedIndicator();
+    }
+}
+
+function showDegradedIndicator(message) {
+    let indicator = document.getElementById('degraded-indicator');
+    
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'degraded-indicator';
+        indicator.className = 'degraded-indicator';
+        // Insert after connection status
+        const header = document.querySelector('.panel-header');
+        if (header) {
+            header.appendChild(indicator);
+        }
+    }
+    
+    indicator.innerHTML = `<span class="degraded-icon">⏸</span> ${message}`;
+    indicator.classList.add('visible');
+}
+
+function hideDegradedIndicator() {
+    const indicator = document.getElementById('degraded-indicator');
+    if (indicator) {
+        indicator.classList.remove('visible');
     }
 }
 

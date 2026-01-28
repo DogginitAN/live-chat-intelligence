@@ -41,13 +41,81 @@ print(f"[Config] LLM Provider: {LLM_PROVIDER}")
 print(f"[Config] WebSocket Port: {WEBSOCKET_PORT}")
 
 
+# ============== RATE LIMIT STATE ==============
+
+class RateLimitState:
+    """Track rate limit status for graceful degradation"""
+    def __init__(self, cooldown_seconds: int = 60):
+        self.is_limited = False
+        self.limited_at: Optional[float] = None
+        self.cooldown_seconds = cooldown_seconds
+        self.consecutive_failures = 0
+        self.total_limit_hits = 0
+    
+    def mark_limited(self):
+        """Called when we hit a rate limit"""
+        self.is_limited = True
+        self.limited_at = datetime.now().timestamp()
+        self.consecutive_failures += 1
+        self.total_limit_hits += 1
+        # Exponential backoff: double cooldown after repeated failures
+        effective_cooldown = self.cooldown_seconds * min(4, self.consecutive_failures)
+        print(f"[RateLimit] Hit rate limit. Cooling down for {effective_cooldown}s (hit #{self.total_limit_hits})")
+    
+    def mark_success(self):
+        """Called on successful LLM call"""
+        self.consecutive_failures = 0
+    
+    def check_available(self) -> bool:
+        """Check if LLM calls are available (not rate limited)"""
+        if not self.is_limited:
+            return True
+        
+        # Check if cooldown has passed
+        now = datetime.now().timestamp()
+        effective_cooldown = self.cooldown_seconds * min(4, self.consecutive_failures)
+        
+        if now - self.limited_at >= effective_cooldown:
+            self.is_limited = False
+            print(f"[RateLimit] Cooldown complete, resuming LLM calls")
+            return True
+        
+        return False
+    
+    def get_status(self) -> dict:
+        """Get current status for client notification"""
+        return {
+            'is_limited': self.is_limited,
+            'total_hits': self.total_limit_hits,
+            'cooldown_remaining': self._cooldown_remaining() if self.is_limited else 0
+        }
+    
+    def _cooldown_remaining(self) -> int:
+        if not self.is_limited or not self.limited_at:
+            return 0
+        effective_cooldown = self.cooldown_seconds * min(4, self.consecutive_failures)
+        remaining = effective_cooldown - (datetime.now().timestamp() - self.limited_at)
+        return max(0, int(remaining))
+
+
+# Global rate limit tracker
+rate_limit_state = RateLimitState(cooldown_seconds=60)
+
+
 # ============== UNIFIED LLM INTERFACE ==============
 
 async def llm_complete(prompt: str, temperature: float = 0, timeout: float = 10.0) -> Optional[str]:
     """
     Unified LLM completion function.
     Uses Ollama locally or Groq in production based on LLM_PROVIDER.
+    Returns None if rate limited or on error.
     """
+    global rate_limit_state
+    
+    # Check if we're in cooldown from rate limiting
+    if LLM_PROVIDER == "groq" and not rate_limit_state.check_available():
+        return None
+    
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             if LLM_PROVIDER == "groq" and GROQ_API_KEY:
@@ -65,14 +133,28 @@ async def llm_complete(prompt: str, temperature: float = 0, timeout: float = 10.
                         "max_tokens": 150
                     }
                 )
+                
+                # Check for rate limit (HTTP 429)
+                if response.status_code == 429:
+                    rate_limit_state.mark_limited()
+                    return None
+                
                 data = response.json()
-                # Check for rate limit or other errors
+                
+                # Check for rate limit in error response
                 if "error" in data:
+                    error_msg = data['error'].get('message', str(data['error'])).lower()
+                    if 'rate' in error_msg or 'limit' in error_msg or 'quota' in error_msg:
+                        rate_limit_state.mark_limited()
+                        return None
                     print(f"[LLM] Groq error: {data['error'].get('message', data['error'])}")
                     return None
+                
+                # Success - reset consecutive failures
+                rate_limit_state.mark_success()
                 return data["choices"][0]["message"]["content"].strip()
             else:
-                # Ollama (local)
+                # Ollama (local) - no rate limiting concerns
                 response = await client.post(
                     OLLAMA_URL,
                     json={
@@ -83,9 +165,22 @@ async def llm_complete(prompt: str, temperature: float = 0, timeout: float = 10.
                     }
                 )
                 return response.json()["response"].strip()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 429:
+            rate_limit_state.mark_limited()
+        else:
+            print(f"[LLM] HTTP Error: {e}")
+        return None
     except Exception as e:
         print(f"[LLM] Error: {e}")
         return None
+
+
+def is_llm_available() -> bool:
+    """Check if LLM features are currently available"""
+    if LLM_PROVIDER != "groq":
+        return True  # Local Ollama has no rate limits
+    return rate_limit_state.check_available()
 
 
 # ============== CONNECTION MANAGEMENT ==============
@@ -566,6 +661,20 @@ async def broadcast_global(message: dict):
     )
 
 
+async def broadcast_rate_limit_status(video_id: str = None):
+    """Notify clients about rate limit status changes"""
+    status_msg = {
+        'type': 'rate_limit_status',
+        'llm_available': is_llm_available(),
+        'status': rate_limit_state.get_status()
+    }
+    
+    if video_id:
+        await broadcast_to_video(video_id, status_msg)
+    else:
+        await broadcast_global(status_msg)
+
+
 # ============== YOUTUBE SCRAPER ==============
 
 def extract_video_id(url: str) -> str:
@@ -600,6 +709,8 @@ async def scrape_youtube_chat(video_id: str):
         vibe_batch = []
         last_vibe_check = asyncio.get_event_loop().time()
         last_pulse_time = asyncio.get_event_loop().time()
+        last_rate_limit_check = asyncio.get_event_loop().time()
+        last_llm_available = is_llm_available()
         
         spam_count = 0
         msg_count = 0
@@ -632,22 +743,40 @@ async def scrape_youtube_chat(video_id: str):
             
             current_time = asyncio.get_event_loop().time()
             
-            # Vibe classification (throttled for rate limits)
+            # Vibe classification (throttled for rate limits, skip if rate limited)
             if current_time - last_vibe_check >= VIBE_CHECK_INTERVAL and vibe_batch:
-                classified = await classify_vibe_batch(vibe_batch[-20:])
-                for msg in classified:
-                    if msg.get('vibe'):
-                        await broadcast_to_video(video_id, {'type': 'vibe', 'data': msg})
-                vibe_batch = []
+                if is_llm_available():
+                    classified = await classify_vibe_batch(vibe_batch[-20:])
+                    for msg in classified:
+                        if msg.get('vibe'):
+                            await broadcast_to_video(video_id, {'type': 'vibe', 'data': msg})
+                vibe_batch = []  # Clear batch either way to prevent memory growth
                 last_vibe_check = current_time
             
-            # Pulse summary
+            # Pulse summary (skip if rate limited)
             if current_time - last_pulse_time >= PULSE_INTERVAL and len(state['pulse_buffer']) >= 10:
-                pulse = await generate_pulse_summary(state['pulse_buffer'])
-                if pulse:
-                    await broadcast_to_video(video_id, {'type': 'pulse', 'data': pulse})
-                state['pulse_buffer'] = []
-                last_pulse_time = current_time
+                if is_llm_available():
+                    pulse = await generate_pulse_summary(state['pulse_buffer'])
+                    if pulse:
+                        await broadcast_to_video(video_id, {'type': 'pulse', 'data': pulse})
+                    state['pulse_buffer'] = []
+                    last_pulse_time = current_time
+                else:
+                    # Still clear old buffer to prevent memory growth, but don't generate
+                    if len(state['pulse_buffer']) > PULSE_MESSAGE_WINDOW * 2:
+                        state['pulse_buffer'] = state['pulse_buffer'][-PULSE_MESSAGE_WINDOW:]
+            
+            # Check for rate limit status changes (every 10 seconds)
+            if current_time - last_rate_limit_check >= 10:
+                current_llm_available = is_llm_available()
+                if current_llm_available != last_llm_available:
+                    await broadcast_rate_limit_status(video_id)
+                    if current_llm_available:
+                        print(f"[Scraper] LLM features restored for {video_id}")
+                    else:
+                        print(f"[Scraper] LLM features paused for {video_id} (rate limited)")
+                    last_llm_available = current_llm_available
+                last_rate_limit_check = current_time
             
             await asyncio.sleep(0.5)
             
@@ -673,7 +802,9 @@ async def handle_client(websocket):
     try:
         await websocket.send(json.dumps({
             'type': 'connected',
-            'message': 'Connected to FlowState backend'
+            'message': 'Connected to FlowState backend',
+            'llm_available': is_llm_available(),
+            'rate_limit_status': rate_limit_state.get_status()
         }))
         
         async for message in websocket:
