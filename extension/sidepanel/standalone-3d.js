@@ -469,10 +469,16 @@ function createTickerOrb(ticker, sentiment) {
     ring.rotation.x = Math.PI / 2;
     orb.add(ring);
     
-    // Add text label
+    // Add ticker text label
     const label = createTextLabel(ticker);
     label.position.y = 5;
     orb.add(label);
+    
+    // Add count label (monochrome, below ticker)
+    const countLabel = createCountLabel(1);
+    countLabel.position.y = -4;
+    countLabel.name = 'countLabel';
+    orb.add(countLabel);
     
     // START TINY - birth animation
     orb.scale.setScalar(0.01);
@@ -492,77 +498,60 @@ function createTickerOrb(ticker, sentiment) {
         birthDuration: 60  // ~1 second at 60fps
     };
     
-    // Create birth particle effect
-    createBirthEffect(orb.position, color);
-    
     tickerOrbs.add(orb);
     return orb;
 }
 
-function createBirthEffect(position, color) {
-    // Expanding ring effect
-    const ringGeometry = new THREE.RingGeometry(0.5, 1, 32);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.8,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending
+function createCountLabel(count) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 128;
+    canvas.height = 64;
+    
+    ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Monochrome count - subtle white/gray
+    ctx.font = 'bold 32px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.fillText(count.toString(), 64, 32);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true
     });
-    const birthRing = new THREE.Mesh(ringGeometry, ringMaterial);
-    birthRing.position.copy(position);
-    birthRing.rotation.x = Math.PI / 2;
-    birthRing.userData = {
-        isBirthRing: true,
-        life: 0,
-        maxLife: 45  // ~0.75 seconds
-    };
-    scene.add(birthRing);
-    state.vibeParticles.push(birthRing);  // Reuse vibe particles array for cleanup
     
-    // Sparkle particles
-    const particleCount = 30;
-    const particleGeometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(particleCount * 3);
-    const velocities = [];
-    
-    for (let i = 0; i < particleCount; i++) {
-        positions[i * 3] = position.x;
-        positions[i * 3 + 1] = position.y;
-        positions[i * 3 + 2] = position.z;
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(5, 2.5, 1);
+    return sprite;
+}
+
+function updateCountLabel(orb, count) {
+    const countLabel = orb.children.find(c => c.name === 'countLabel');
+    if (countLabel) {
+        // Update the texture with new count
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 128;
+        canvas.height = 64;
         
-        // Outward burst
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.acos(2 * Math.random() - 1);
-        const speed = 0.3 + Math.random() * 0.5;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        velocities.push(new THREE.Vector3(
-            Math.sin(phi) * Math.cos(theta) * speed,
-            Math.sin(phi) * Math.sin(theta) * speed,
-            Math.cos(phi) * speed
-        ));
+        ctx.font = 'bold 32px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillText(count.toString(), 64, 32);
+        
+        // Dispose old texture and create new one
+        countLabel.material.map.dispose();
+        countLabel.material.map = new THREE.CanvasTexture(canvas);
+        countLabel.material.needsUpdate = true;
     }
-    
-    particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    
-    const particleMaterial = new THREE.PointsMaterial({
-        color: color,
-        size: 2,
-        transparent: true,
-        opacity: 1,
-        blending: THREE.AdditiveBlending
-    });
-    
-    const particles = new THREE.Points(particleGeometry, particleMaterial);
-    particles.userData = {
-        velocities: velocities,
-        life: 0,
-        maxLife: 40,
-        isParticles: true
-    };
-    
-    scene.add(particles);
-    state.vibeParticles.push(particles);
 }
 
 function createTextLabel(text) {
@@ -610,6 +599,9 @@ function updateTickerOrb(ticker, data) {
     orbData.count = data.count;
     orbData.sentiment = data.sentiment;
     
+    // Update count label on the orb
+    updateCountLabel(orbData.orb, data.count);
+    
     // Recalculate ALL orb scales relative to max (like 2D bubbles)
     recalculateOrbScales();
     
@@ -625,7 +617,7 @@ function updateTickerOrb(ticker, data) {
         ring.material.color.setHex(color);
     }
     
-    // Pulse effect on update
+    // Subtle pulse effect on update (no particles, just scale)
     orbData.orb.userData.pulseTime = clock.getElapsedTime();
 }
 
@@ -956,26 +948,12 @@ function animate() {
         }
     });
     
-    // Animate vibe particles, labels, and birth effects
+    // Animate vibe particles and labels
     state.vibeParticles.forEach((obj, index) => {
         const data = obj.userData;
         data.life++;
         
-        if (data.isBirthRing) {
-            // Expanding birth ring animation
-            const t = data.life / data.maxLife;
-            const scale = 1 + t * 15;  // Expand outward
-            obj.scale.setScalar(scale);
-            obj.material.opacity = 0.8 * (1 - t);  // Fade out as it expands
-            
-            // Remove when done
-            if (data.life >= data.maxLife) {
-                scene.remove(obj);
-                obj.geometry.dispose();
-                obj.material.dispose();
-                state.vibeParticles.splice(index, 1);
-            }
-        } else if (data.isParticles) {
+        if (data.isParticles) {
             // Particle system animation
             const positions = obj.geometry.attributes.position.array;
             for (let i = 0; i < data.velocities.length; i++) {
