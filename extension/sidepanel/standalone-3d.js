@@ -853,8 +853,8 @@ function createFlyingMessage(text, sentiment, isQuestion, hasTicker) {
     // Text trail - no background, just glowing text
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 1024;
-    canvas.height = 80;
+    canvas.width = 2048;
+    canvas.height = 160;
     
     // Truncate text
     const maxLen = 50;
@@ -864,25 +864,25 @@ function createFlyingMessage(text, sentiment, isQuestion, hasTicker) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Glowing text effect - multiple passes for bloom
-    ctx.font = 'bold 36px -apple-system, sans-serif';
+    ctx.font = 'bold 72px -apple-system, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     
     // Outer glow (larger, more transparent)
     ctx.shadowColor = `#${color.toString(16).padStart(6, '0')}`;
-    ctx.shadowBlur = 25;
+    ctx.shadowBlur = 30;
     ctx.fillStyle = `rgba(255, 255, 255, 0.3)`;
-    ctx.fillText(displayText, 20, 40);
+    ctx.fillText(displayText, 40, 80);
     
     // Middle glow
-    ctx.shadowBlur = 15;
+    ctx.shadowBlur = 20;
     ctx.fillStyle = `rgba(255, 255, 255, 0.5)`;
-    ctx.fillText(displayText, 20, 40);
+    ctx.fillText(displayText, 40, 80);
     
     // Core text (bright)
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 10;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.fillText(displayText, 20, 40);
+    ctx.fillText(displayText, 40, 80);
     
     const textTexture = new THREE.CanvasTexture(canvas);
     const textMaterial = new THREE.SpriteMaterial({
@@ -894,8 +894,8 @@ function createFlyingMessage(text, sentiment, isQuestion, hasTicker) {
     });
     
     const textSprite = new THREE.Sprite(textMaterial);
-    textSprite.scale.set(50, 4, 1);
-    textSprite.position.x = -28;  // Trail behind the orb
+    textSprite.scale.set(100, 8, 1);  // 2x larger
+    textSprite.position.x = -55;  // Trail behind the orb (adjusted for larger size)
     textSprite.name = 'textTrail';
     comet.add(textSprite);
     
