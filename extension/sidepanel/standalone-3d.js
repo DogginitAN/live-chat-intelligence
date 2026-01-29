@@ -824,49 +824,107 @@ function createFlyingMessage(text, sentiment, isQuestion, hasTicker) {
                   hasTicker ? COLORS[sentiment] || COLORS.message :
                   COLORS.message;
     
-    // Create sprite with LARGER text
+    // Create a group to hold the comet (orb + text trail)
+    const comet = new THREE.Group();
+    
+    // Leading orb - the "soul" of the message
+    const orbGeometry = new THREE.SphereGeometry(0.8, 16, 16);
+    const orbMaterial = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.9
+    });
+    const orb = new THREE.Mesh(orbGeometry, orbMaterial);
+    comet.add(orb);
+    
+    // Orb glow sprite
+    const glowMaterial = new THREE.SpriteMaterial({
+        map: getGlowTexture(),
+        color: color,
+        transparent: true,
+        opacity: 0.7,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    const glowSprite = new THREE.Sprite(glowMaterial);
+    glowSprite.scale.set(5, 5, 1);
+    comet.add(glowSprite);
+    
+    // Text trail - no background, just glowing text
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 1024;  // Bigger canvas
-    canvas.height = 128;
+    canvas.width = 1024;
+    canvas.height = 80;
     
     // Truncate text
-    const maxLen = 60;
+    const maxLen = 50;
     const displayText = text.length > maxLen ? text.slice(0, maxLen) + '...' : text;
     
-    // Background pill for readability
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    const textWidth = ctx.measureText(displayText).width || 600;
-    ctx.beginPath();
-    ctx.roundRect(5, 20, Math.min(textWidth + 40, 1000), 88, 20);
-    ctx.fill();
+    // Clear canvas (transparent)
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    ctx.font = 'bold 42px -apple-system, sans-serif';
+    // Glowing text effect - multiple passes for bloom
+    ctx.font = 'bold 36px -apple-system, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     
-    // Glow effect
+    // Outer glow (larger, more transparent)
     ctx.shadowColor = `#${color.toString(16).padStart(6, '0')}`;
-    ctx.shadowBlur = 15;
-    ctx.fillStyle = 'white';
-    ctx.fillText(displayText, 25, 64);
+    ctx.shadowBlur = 25;
+    ctx.fillStyle = `rgba(255, 255, 255, 0.3)`;
+    ctx.fillText(displayText, 20, 40);
     
-    const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({
-        map: texture,
+    // Middle glow
+    ctx.shadowBlur = 15;
+    ctx.fillStyle = `rgba(255, 255, 255, 0.5)`;
+    ctx.fillText(displayText, 20, 40);
+    
+    // Core text (bright)
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.fillText(displayText, 20, 40);
+    
+    const textTexture = new THREE.CanvasTexture(canvas);
+    const textMaterial = new THREE.SpriteMaterial({
+        map: textTexture,
         transparent: true,
-        opacity: 0
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
     });
     
-    const sprite = new THREE.Sprite(material);
-    sprite.scale.set(60, 7.5, 1);  // Much larger scale
+    const textSprite = new THREE.Sprite(textMaterial);
+    textSprite.scale.set(50, 4, 1);
+    textSprite.position.x = -28;  // Trail behind the orb
+    textSprite.name = 'textTrail';
+    comet.add(textSprite);
+    
+    // Small particle trail behind the orb
+    const trailCount = 8;
+    for (let i = 0; i < trailCount; i++) {
+        const trailMaterial = new THREE.SpriteMaterial({
+            map: getGlowTexture(),
+            color: color,
+            transparent: true,
+            opacity: 0.4 * (1 - i / trailCount),
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        const trail = new THREE.Sprite(trailMaterial);
+        const size = 2.5 * (1 - i / trailCount);
+        trail.scale.set(size, size, 1);
+        trail.position.x = -(i + 1) * 2;  // Spread behind
+        trail.position.y = (Math.random() - 0.5) * 0.5;
+        trail.name = 'trail';
+        comet.add(trail);
+    }
     
     // Start from random position far away
     const startAngle = Math.random() * Math.PI * 2;
     const startRadius = 200 + Math.random() * 100;
     const startY = (Math.random() - 0.5) * 100;
     
-    sprite.position.set(
+    comet.position.set(
         Math.cos(startAngle) * startRadius,
         startY,
         Math.sin(startAngle) * startRadius
@@ -878,26 +936,45 @@ function createFlyingMessage(text, sentiment, isQuestion, hasTicker) {
     const targetZ = (Math.random() - 0.5) * 30;
     
     const direction = new THREE.Vector3(
-        targetX - sprite.position.x,
-        targetY - sprite.position.y,
-        targetZ - sprite.position.z
+        targetX - comet.position.x,
+        targetY - comet.position.y,
+        targetZ - comet.position.z
     ).normalize();
     
-    sprite.userData = {
+    // Orient comet to face direction of travel
+    comet.lookAt(
+        comet.position.x + direction.x,
+        comet.position.y + direction.y,
+        comet.position.z + direction.z
+    );
+    
+    comet.userData = {
         direction: direction,
-        speed: 0.3 + Math.random() * 0.2,  // Slower movement
+        speed: 0.4 + Math.random() * 0.3,
         life: 0,
-        maxLife: 500 + Math.random() * 200  // ~8-12 seconds at 60fps
+        maxLife: 450 + Math.random() * 150,  // ~7-10 seconds
+        textSprite: textSprite,
+        orb: orb,
+        glowSprite: glowSprite
     };
     
-    messageTrails.add(sprite);
-    state.flyingMessages.push(sprite);
+    messageTrails.add(comet);
+    state.flyingMessages.push(comet);
     
     // Limit total messages
-    while (state.flyingMessages.length > 100) {
+    while (state.flyingMessages.length > 80) {
         const old = state.flyingMessages.shift();
         messageTrails.remove(old);
-        old.material.dispose();
+        // Dispose all materials in the group
+        old.traverse(child => {
+            if (child.material) {
+                if (child.material.map && child.material.map !== glowTexture) {
+                    child.material.map.dispose();
+                }
+                child.material.dispose();
+            }
+            if (child.geometry) child.geometry.dispose();
+        });
     }
 }
 
@@ -1087,31 +1164,70 @@ function animate() {
         }
     });
     
-    // Animate flying messages
-    state.flyingMessages.forEach((sprite, index) => {
-        const data = sprite.userData;
+    // Animate flying message comets
+    for (let i = state.flyingMessages.length - 1; i >= 0; i--) {
+        const comet = state.flyingMessages[i];
+        const data = comet.userData;
         data.life++;
         
         // Move toward center
-        sprite.position.add(data.direction.clone().multiplyScalar(data.speed));
+        comet.position.add(data.direction.clone().multiplyScalar(data.speed));
+        
+        // Keep comet oriented toward direction of travel
+        comet.lookAt(
+            comet.position.x + data.direction.x,
+            comet.position.y + data.direction.y,
+            comet.position.z + data.direction.z
+        );
         
         // Fade in/out
         const lifeRatio = data.life / data.maxLife;
+        let opacity;
         if (lifeRatio < 0.1) {
-            sprite.material.opacity = lifeRatio * 10;
+            opacity = lifeRatio * 10;  // Fade in
         } else if (lifeRatio > 0.7) {
-            sprite.material.opacity = (1 - lifeRatio) * 3.33;
+            opacity = (1 - lifeRatio) * 3.33;  // Fade out
         } else {
-            sprite.material.opacity = 1;
+            opacity = 1;
         }
+        
+        // Apply opacity to text trail
+        if (data.textSprite) {
+            data.textSprite.material.opacity = opacity * 0.9;
+        }
+        
+        // Apply to orb and glow
+        if (data.orb) {
+            data.orb.material.opacity = opacity * 0.9;
+        }
+        if (data.glowSprite) {
+            data.glowSprite.material.opacity = opacity * 0.7;
+        }
+        
+        // Fade trail particles
+        comet.children.forEach(child => {
+            if (child.name === 'trail') {
+                const baseOpacity = parseFloat(child.userData.baseOpacity || child.material.opacity / opacity || 0.3);
+                child.userData.baseOpacity = baseOpacity;
+                child.material.opacity = baseOpacity * opacity;
+            }
+        });
         
         // Remove when done
         if (data.life >= data.maxLife) {
-            messageTrails.remove(sprite);
-            sprite.material.dispose();
-            state.flyingMessages.splice(index, 1);
+            messageTrails.remove(comet);
+            comet.traverse(child => {
+                if (child.material) {
+                    if (child.material.map && child.material.map !== glowTexture) {
+                        child.material.map.dispose();
+                    }
+                    child.material.dispose();
+                }
+                if (child.geometry) child.geometry.dispose();
+            });
+            state.flyingMessages.splice(i, 1);
         }
-    });
+    }
     
     // Animate vibe particles and labels
     state.vibeParticles.forEach((obj, index) => {
