@@ -540,6 +540,65 @@ function getGlowTexture() {
     return glowTexture;
 }
 
+// Create sparkle/starburst texture for vibes (4-pointed star)
+let sparkleTexture = null;
+function getSparkleTexture() {
+    if (sparkleTexture) return sparkleTexture;
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    const cx = 64, cy = 64;
+    
+    // Clear
+    ctx.clearRect(0, 0, 128, 128);
+    
+    // Draw 4-pointed star with glow
+    ctx.save();
+    
+    // Outer glow
+    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, 60);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.2, 'rgba(255, 255, 255, 0.6)');
+    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    
+    // Draw star shape
+    ctx.beginPath();
+    const spikes = 4;
+    const outerRadius = 60;
+    const innerRadius = 12;
+    
+    for (let i = 0; i < spikes * 2; i++) {
+        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+        const angle = (i * Math.PI / spikes) - Math.PI / 2;
+        const x = cx + Math.cos(angle) * radius;
+        const y = cy + Math.sin(angle) * radius;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    
+    // Bright center
+    const centerGradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, 15);
+    centerGradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    centerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = centerGradient;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 15, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.restore();
+    
+    sparkleTexture = new THREE.CanvasTexture(canvas);
+    return sparkleTexture;
+}
+
+
 function findNonCollidingPosition(baseAngle, baseRadius, baseHeight) {
     const minDistance = 15;  // Minimum distance between orb centers
     let attempts = 0;
@@ -980,114 +1039,146 @@ function createFlyingMessage(text, sentiment, isQuestion, hasTicker) {
 
 // ============== VIBE EXPLOSIONS ==============
 
+// Track spawn zone for round-robin
+let vibeSpawnZone = 0;
+
+// Vibe colors - warm gold for funny, pink for uplifting
+const VIBE_COLORS = {
+    funny: 0xffd700,      // Gold
+    uplifting: 0xff69b4   // Hot pink
+};
+
 function createVibeExplosion(vibeType, messageText) {
-    const color = vibeType === 'funny' ? COLORS.funny : COLORS.uplifting;
+    const color = VIBE_COLORS[vibeType] || VIBE_COLORS.funny;
     const emoji = vibeType === 'funny' ? '😂' : '💖';
     const label = vibeType === 'funny' ? 'FUNNY' : 'UPLIFTING';
     
-    // Random position in view
+    // Spawn in one of 3 zones at bottom, cycle through them
+    vibeSpawnZone = (vibeSpawnZone + 1) % 3;
+    const zoneX = (vibeSpawnZone - 1) * 60;  // -60, 0, 60
     const origin = new THREE.Vector3(
-        (Math.random() - 0.5) * 80,
-        (Math.random() - 0.5) * 40,
-        (Math.random() - 0.5) * 80
+        zoneX + (Math.random() - 0.5) * 30,
+        -50 + (Math.random() - 0.5) * 10,  // Bottom of view
+        (Math.random() - 0.5) * 40
     );
     
-    // Create floating label that shows what triggered it
+    // Create container group for the whole vibe
+    const vibeGroup = new THREE.Group();
+    vibeGroup.position.copy(origin);
+    
+    // Big emoji sprite that rises with the vibe
+    const emojiCanvas = document.createElement('canvas');
+    const emojiCtx = emojiCanvas.getContext('2d');
+    emojiCanvas.width = 128;
+    emojiCanvas.height = 128;
+    emojiCtx.font = '80px sans-serif';
+    emojiCtx.textAlign = 'center';
+    emojiCtx.textBaseline = 'middle';
+    emojiCtx.fillText(emoji, 64, 64);
+    
+    const emojiTexture = new THREE.CanvasTexture(emojiCanvas);
+    const emojiMaterial = new THREE.SpriteMaterial({
+        map: emojiTexture,
+        transparent: true,
+        opacity: 1
+    });
+    const emojiSprite = new THREE.Sprite(emojiMaterial);
+    emojiSprite.scale.set(15, 15, 1);
+    emojiSprite.position.y = 5;
+    vibeGroup.add(emojiSprite);
+    
+    // Label below emoji
     const labelCanvas = document.createElement('canvas');
     const labelCtx = labelCanvas.getContext('2d');
     labelCanvas.width = 512;
-    labelCanvas.height = 256;
+    labelCanvas.height = 128;
     
-    // Background
-    labelCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    labelCtx.beginPath();
-    labelCtx.roundRect(10, 10, 492, 236, 20);
-    labelCtx.fill();
+    labelCtx.clearRect(0, 0, 512, 128);
     
-    // Border glow
-    labelCtx.strokeStyle = `#${color.toString(16).padStart(6, '0')}`;
-    labelCtx.lineWidth = 4;
-    labelCtx.shadowColor = `#${color.toString(16).padStart(6, '0')}`;
-    labelCtx.shadowBlur = 20;
-    labelCtx.stroke();
-    
-    // Emoji and label
+    // Glowing label text (no background)
     labelCtx.font = 'bold 48px -apple-system, sans-serif';
     labelCtx.textAlign = 'center';
+    labelCtx.textBaseline = 'middle';
+    labelCtx.shadowColor = `#${color.toString(16).padStart(6, '0')}`;
+    labelCtx.shadowBlur = 20;
     labelCtx.fillStyle = 'white';
-    labelCtx.fillText(`${emoji} ${label}`, 256, 70);
+    labelCtx.fillText(label, 256, 40);
     
-    // Message preview (truncated)
-    labelCtx.font = '28px -apple-system, sans-serif';
-    labelCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    const preview = messageText && messageText.length > 40 
-        ? messageText.slice(0, 40) + '...' 
-        : (messageText || '');
-    labelCtx.fillText(preview, 256, 140);
+    // Message preview (smaller)
+    if (messageText) {
+        labelCtx.font = '28px -apple-system, sans-serif';
+        labelCtx.shadowBlur = 10;
+        labelCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        const preview = messageText.length > 35 ? messageText.slice(0, 35) + '...' : messageText;
+        labelCtx.fillText(preview, 256, 90);
+    }
     
     const labelTexture = new THREE.CanvasTexture(labelCanvas);
     const labelMaterial = new THREE.SpriteMaterial({
         map: labelTexture,
         transparent: true,
-        opacity: 1
-    });
-    
-    const labelSprite = new THREE.Sprite(labelMaterial);
-    labelSprite.scale.set(40, 20, 1);
-    labelSprite.position.copy(origin);
-    labelSprite.position.y += 15;  // Float above explosion
-    
-    labelSprite.userData = {
-        life: 0,
-        maxLife: 180  // 3 seconds at 60fps
-    };
-    
-    scene.add(labelSprite);
-    state.vibeParticles.push(labelSprite);
-    
-    // Create particle burst
-    const particleCount = 150;  // More particles
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(particleCount * 3);
-    const velocities = [];
-    
-    for (let i = 0; i < particleCount; i++) {
-        positions[i * 3] = origin.x;
-        positions[i * 3 + 1] = origin.y;
-        positions[i * 3 + 2] = origin.z;
-        
-        // Spherical burst
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.acos(2 * Math.random() - 1);
-        const speed = 1 + Math.random() * 2;
-        
-        velocities.push(new THREE.Vector3(
-            Math.sin(phi) * Math.cos(theta) * speed,
-            Math.sin(phi) * Math.sin(theta) * speed,
-            Math.cos(phi) * speed
-        ));
-    }
-    
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    
-    const material = new THREE.PointsMaterial({
-        color: color,
-        size: 5,  // Bigger particles
-        transparent: true,
         opacity: 1,
         blending: THREE.AdditiveBlending
     });
     
-    const particles = new THREE.Points(geometry, material);
-    particles.userData = {
-        velocities: velocities,
+    const labelSprite = new THREE.Sprite(labelMaterial);
+    labelSprite.scale.set(35, 9, 1);
+    labelSprite.position.y = -8;
+    vibeGroup.add(labelSprite);
+    
+    // Sparkle burst particles
+    const sparkleCount = 40;
+    const sparkles = [];
+    
+    for (let i = 0; i < sparkleCount; i++) {
+        const sparkleMaterial = new THREE.SpriteMaterial({
+            map: getSparkleTexture(),
+            color: color,
+            transparent: true,
+            opacity: 0.9,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            rotation: Math.random() * Math.PI  // Random initial rotation
+        });
+        
+        const sparkle = new THREE.Sprite(sparkleMaterial);
+        const size = 2 + Math.random() * 4;
+        sparkle.scale.set(size, size, 1);
+        sparkle.position.set(0, 0, 0);  // Start at center
+        
+        // Burst velocity - outward and upward
+        const burstAngle = Math.random() * Math.PI * 2;
+        const burstSpeed = 0.5 + Math.random() * 1.5;
+        const upwardBias = 0.5 + Math.random() * 0.5;  // More upward
+        
+        sparkle.userData = {
+            velocity: new THREE.Vector3(
+                Math.cos(burstAngle) * burstSpeed * 0.7,
+                burstSpeed * upwardBias,  // Upward bias
+                Math.sin(burstAngle) * burstSpeed * 0.7
+            ),
+            rotationSpeed: (Math.random() - 0.5) * 0.1,
+            twinkleOffset: Math.random() * Math.PI * 2,
+            twinkleSpeed: 3 + Math.random() * 3,
+            baseOpacity: 0.7 + Math.random() * 0.3
+        };
+        
+        vibeGroup.add(sparkle);
+        sparkles.push(sparkle);
+    }
+    
+    vibeGroup.userData = {
         life: 0,
-        maxLife: 120,
-        isParticles: true
+        maxLife: 200,  // ~3.3 seconds
+        sparkles: sparkles,
+        emojiSprite: emojiSprite,
+        labelSprite: labelSprite,
+        floatSpeed: 0.3 + Math.random() * 0.2,
+        isVibeGroup: true
     };
     
-    scene.add(particles);
-    state.vibeParticles.push(particles);
+    scene.add(vibeGroup);
+    state.vibeParticles.push(vibeGroup);
 }
 
 // ============== ANIMATION LOOP ==============
@@ -1229,52 +1320,90 @@ function animate() {
         }
     }
     
-    // Animate vibe particles and labels
-    state.vibeParticles.forEach((obj, index) => {
-        const data = obj.userData;
-        data.life++;
+    // Animate vibe particles - sparkle fireworks rising from bottom
+    for (let i = state.vibeParticles.length - 1; i >= 0; i--) {
+        const vibeGroup = state.vibeParticles[i];
+        const data = vibeGroup.userData;
         
-        if (data.isParticles) {
-            // Particle system animation
-            const positions = obj.geometry.attributes.position.array;
-            for (let i = 0; i < data.velocities.length; i++) {
-                positions[i * 3] += data.velocities[i].x;
-                positions[i * 3 + 1] += data.velocities[i].y;
-                positions[i * 3 + 2] += data.velocities[i].z;
-                
-                // Slow down
-                data.velocities[i].multiplyScalar(0.97);
+        if (!data.isVibeGroup) {
+            // Old-style particle system (legacy cleanup)
+            data.life++;
+            if (data.life >= (data.maxLife || 120)) {
+                scene.remove(vibeGroup);
+                if (vibeGroup.geometry) vibeGroup.geometry.dispose();
+                if (vibeGroup.material) vibeGroup.material.dispose();
+                state.vibeParticles.splice(i, 1);
             }
-            obj.geometry.attributes.position.needsUpdate = true;
-            
-            // Fade out
-            obj.material.opacity = 1 - (data.life / data.maxLife);
-            
-            // Remove when done
-            if (data.life >= data.maxLife) {
-                scene.remove(obj);
-                obj.geometry.dispose();
-                obj.material.dispose();
-                state.vibeParticles.splice(index, 1);
-            }
-        } else {
-            // Label sprite animation - float up and fade
-            obj.position.y += 0.1;
-            
-            // Fade out in last third of life
-            if (data.life > data.maxLife * 0.6) {
-                const fadeProgress = (data.life - data.maxLife * 0.6) / (data.maxLife * 0.4);
-                obj.material.opacity = 1 - fadeProgress;
-            }
-            
-            // Remove when done
-            if (data.life >= data.maxLife) {
-                scene.remove(obj);
-                obj.material.dispose();
-                state.vibeParticles.splice(index, 1);
-            }
+            continue;
         }
-    });
+        
+        data.life++;
+        const lifeRatio = data.life / data.maxLife;
+        
+        // Float the whole group upward
+        vibeGroup.position.y += data.floatSpeed;
+        
+        // Animate sparkles - burst outward, slow down, twinkle
+        data.sparkles.forEach(sparkle => {
+            const sd = sparkle.userData;
+            
+            // Apply velocity with drag
+            sparkle.position.add(sd.velocity);
+            sd.velocity.multiplyScalar(0.96);  // Drag
+            sd.velocity.y += 0.01;  // Slight upward drift
+            
+            // Rotate
+            sparkle.material.rotation += sd.rotationSpeed;
+            
+            // Twinkle effect
+            const twinkle = 0.5 + Math.sin(elapsed * sd.twinkleSpeed + sd.twinkleOffset) * 0.5;
+            
+            // Fade based on life
+            let opacity;
+            if (lifeRatio < 0.1) {
+                opacity = lifeRatio * 10;  // Fade in
+            } else if (lifeRatio > 0.6) {
+                opacity = (1 - lifeRatio) * 2.5;  // Fade out
+            } else {
+                opacity = 1;
+            }
+            
+            sparkle.material.opacity = sd.baseOpacity * opacity * twinkle;
+        });
+        
+        // Fade emoji and label
+        let mainOpacity;
+        if (lifeRatio < 0.1) {
+            mainOpacity = lifeRatio * 10;
+        } else if (lifeRatio > 0.7) {
+            mainOpacity = (1 - lifeRatio) * 3.33;
+        } else {
+            mainOpacity = 1;
+        }
+        
+        data.emojiSprite.material.opacity = mainOpacity;
+        data.labelSprite.material.opacity = mainOpacity * 0.9;
+        
+        // Slight scale up as it rises for dramatic effect
+        const growScale = 1 + lifeRatio * 0.3;
+        data.emojiSprite.scale.setScalar(15 * growScale);
+        
+        // Remove when done
+        if (data.life >= data.maxLife) {
+            // Dispose all materials in the group
+            vibeGroup.traverse(child => {
+                if (child.material) {
+                    if (child.material.map && child.material.map !== sparkleTexture) {
+                        child.material.map.dispose();
+                    }
+                    child.material.dispose();
+                }
+                if (child.geometry) child.geometry.dispose();
+            });
+            scene.remove(vibeGroup);
+            state.vibeParticles.splice(i, 1);
+        }
+    }
     
     // Auto-rotate camera slowly when not dragging
     if (!isDragging && state.connected) {
