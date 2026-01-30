@@ -718,8 +718,13 @@ async def scrape_youtube_chat(video_id: str):
         while chat.is_alive():
             # Check if anyone is still watching
             if video_id not in video_clients or not video_clients[video_id]:
-                print(f"[Scraper] No more clients for {video_id}, stopping")
+                print(f"[Scraper] ⚠️ No more clients for {video_id}, STOPPING SCRAPER")
                 break
+            
+            # Log client count periodically (every ~30 seconds based on loop)
+            if msg_count % 60 == 0:
+                client_count = len(video_clients.get(video_id, set()))
+                print(f"[Scraper] {video_id}: {msg_count} messages processed, {client_count} clients connected")
             
             for c in chat.get().sync_items():
                 processed = process_message(c, state)
@@ -796,8 +801,9 @@ async def handle_client(websocket):
     """Handle a WebSocket client connection"""
     connected_clients.add(websocket)
     client_video_id = None
+    client_id = id(websocket)  # Unique ID for logging
     
-    print(f"[WS] Client connected. Total: {len(connected_clients)}")
+    print(f"[WS] Client {client_id} connected. Total clients: {len(connected_clients)}")
     
     try:
         await websocket.send(json.dumps({
@@ -829,7 +835,8 @@ async def handle_client(websocket):
                             video_clients[video_id] = set()
                         video_clients[video_id].add(websocket)
                         
-                        print(f"[WS] Client subscribed to {video_id}")
+                        client_count = len(video_clients.get(video_id, set()))
+                        print(f"[WS] Client {client_id} subscribed to {video_id}. Clients for this video: {client_count}")
                         
                         # Start scraper if not already running
                         if video_id not in active_scrapers:
@@ -867,7 +874,9 @@ async def handle_client(websocket):
         connected_clients.discard(websocket)
         if client_video_id and client_video_id in video_clients:
             video_clients[client_video_id].discard(websocket)
-        print(f"[WS] Client disconnected. Total: {len(connected_clients)}")
+            remaining = len(video_clients.get(client_video_id, set()))
+            print(f"[WS] Client {client_id} disconnected from {client_video_id}. Remaining clients for video: {remaining}")
+        print(f"[WS] Client {client_id} disconnected. Total clients: {len(connected_clients)}")
 
 
 # ============== MAIN ==============

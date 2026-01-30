@@ -1,12 +1,11 @@
 {
   "manifest_version": 3,
   "name": "FlowState",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Transform chaotic YouTube Live chat into visual clarity - ticker detection, sentiment analysis, and AI summaries",
   
   "permissions": [
     "activeTab",
-    "storage",
     "sidePanel",
     "tabs"
   ],

@@ -25,7 +25,11 @@ const state = {
     
     // Velocity tracking
     recentMessages: [],
-    velocity: 0
+    velocity: 0,
+    
+    // Debug counters
+    totalMessagesReceived: 0,
+    totalVibesReceived: 0
 };
 
 // ============== THREE.JS GLOBALS ==============
@@ -1470,7 +1474,7 @@ function connectToStream(videoId) {
     }
     
     state.ws.onopen = () => {
-        console.log('[Universe] WebSocket connected');
+        console.log('[Universe] ✅ WebSocket CONNECTED to', BACKEND_URL);
         reconnectAttempts = 0;  // Reset on successful connection
         state.ws.send(JSON.stringify({
             type: 'SUBSCRIBE',
@@ -1500,7 +1504,7 @@ function connectToStream(videoId) {
     };
     
     state.ws.onclose = (e) => {
-        console.log('[Universe] WebSocket closed, code:', e.code, 'reason:', e.reason);
+        console.log('[Universe] ⚠️ WebSocket CLOSED, code:', e.code, 'reason:', e.reason, 'wasConnected:', state.connected);
         state.connected = false;
         setStatus(false);
         
@@ -1544,6 +1548,8 @@ function scheduleReconnect(videoId) {
 }
 
 function handleMessage(msg) {
+    console.log('[Universe] Received message type:', msg.type, msg.data ? `(has data: ${!!msg.data.topic}, ${!!msg.data.vibe})` : '');
+    
     switch (msg.type) {
         case 'subscribed':
             console.log('[Universe] Subscribed to:', msg.videoId);
@@ -1574,8 +1580,14 @@ function handleMessage(msg) {
 }
 
 function processMessage(msg) {
+    state.totalMessagesReceived++;
     const now = Date.now();
     state.recentMessages.push(now);
+    
+    // Log every 10th message to avoid spam
+    if (state.totalMessagesReceived % 10 === 0) {
+        console.log(`[Universe] Messages: ${state.totalMessagesReceived}, Vibes: ${state.totalVibesReceived}, Active comets: ${state.flyingMessages.length}`);
+    }
     
     // Create flying message
     createFlyingMessage(msg.text, msg.sentiment, msg.isQuestion, !!msg.topic);
@@ -1602,6 +1614,8 @@ function processMessage(msg) {
 
 function processVibe(msg) {
     if (msg.vibe) {
+        state.totalVibesReceived++;
+        console.log(`[Universe] 🎉 Vibe received: ${msg.vibe} (total: ${state.totalVibesReceived})`);
         createVibeExplosion(msg.vibe, msg.text || msg.message || '');
     }
 }
